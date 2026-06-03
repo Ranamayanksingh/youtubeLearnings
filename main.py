@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()  # loads .env from project root if present
 
 from src.ingestion import pipeline
+from src.utils import cleanup
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,6 +52,18 @@ def cmd_ingest(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_cleanup(args: argparse.Namespace) -> None:
+    if args.all:
+        archived = cleanup.archive_all()
+        logger.info(f"Done — {len(archived)} video(s) archived to final/")
+    elif args.video_id:
+        path = cleanup.archive(args.video_id)
+        logger.info(f"Done — archived to {path}/")
+    else:
+        logger.error("Provide --all or --video-id <id>.")
+        sys.exit(1)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="main.py",
@@ -58,6 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # --- ingest ---
     ingest = subparsers.add_parser("ingest", help="Download and extract video content")
     group = ingest.add_mutually_exclusive_group(required=True)
     group.add_argument("--url", help="Single YouTube URL")
@@ -69,6 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Whisper model size: tiny, base, small (default), medium, large-v3",
     )
 
+    # --- cleanup ---
+    clean = subparsers.add_parser(
+        "cleanup",
+        help="Archive study notes + frames into final/ (does not delete output/)",
+    )
+    clean_group = clean.add_mutually_exclusive_group(required=True)
+    clean_group.add_argument("--all", action="store_true", help="Archive all completed videos")
+    clean_group.add_argument("--video-id", metavar="ID", help="Archive a single video by ID")
+
     return parser
 
 
@@ -78,6 +101,8 @@ def main() -> None:
 
     if args.command == "ingest":
         cmd_ingest(args)
+    elif args.command == "cleanup":
+        cmd_cleanup(args)
 
 
 if __name__ == "__main__":
