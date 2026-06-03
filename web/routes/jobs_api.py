@@ -63,6 +63,18 @@ async def get_job(job_id: str, request: Request):
 
 # ── HTMX status fragment ──────────────────────────────────────────────────────
 
+@router.get("/dashboard/jobs", response_class=HTMLResponse)
+async def dashboard_jobs_fragment(request: Request):
+    """HTML fragment for the jobs sections on the dashboard — polled every 4s."""
+    store = request.app.state.store
+    templates = request.app.state.templates
+    jobs = store.list_all()
+    return templates.TemplateResponse(
+        request, "partials/dashboard_jobs.html",
+        {"jobs": jobs},
+    )
+
+
 @router.get("/jobs/{job_id}/status", response_class=HTMLResponse)
 async def job_status_fragment(job_id: str, request: Request):
     store = request.app.state.store

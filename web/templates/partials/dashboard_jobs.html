@@ -1,0 +1,51 @@
+{#
+  dashboard_jobs.html — Polled fragment for the dashboard jobs list.
+  Only this div refreshes; the submit form above is never touched.
+#}
+{% set active_jobs = jobs | selectattr('status', 'in', ['queued', 'running']) | list %}
+{% set done_jobs   = jobs | selectattr('status', 'equalto', 'completed') | list %}
+{% set failed_jobs = jobs | selectattr('status', 'equalto', 'failed') | list %}
+
+<div id="jobs-sections"
+     hx-get="/api/dashboard/jobs"
+     hx-trigger="every 4s"
+     hx-swap="outerHTML">
+
+  <!-- Active Jobs -->
+  <section class="mb-8">
+    <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
+      Active Jobs
+      {% if active_jobs %}
+        <span class="ml-2 bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 text-xs">{{ active_jobs | length }}</span>
+      {% endif %}
+    </h3>
+    <div class="space-y-3">
+      {% if active_jobs %}
+        {% for job in active_jobs %}
+          {% include "partials/job_card.html" %}
+        {% endfor %}
+      {% else %}
+        <p class="text-stone-400 text-sm italic py-4 text-center">No active jobs. Submit a URL above to get started.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Completed / Failed Jobs -->
+  {% if done_jobs or failed_jobs %}
+  <section class="mb-8">
+    <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
+      Completed
+      <span class="ml-2 bg-green-100 text-green-700 rounded-full px-2 py-0.5 text-xs">{{ done_jobs | length }}</span>
+    </h3>
+    <div class="space-y-3">
+      {% for job in done_jobs %}
+        {% include "partials/job_card.html" %}
+      {% endfor %}
+      {% for job in failed_jobs %}
+        {% include "partials/job_card.html" %}
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+</div>
