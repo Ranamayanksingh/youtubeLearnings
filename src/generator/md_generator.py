@@ -39,16 +39,29 @@ STRICT RULES:
 1. **Merge** topics with the same or closely related headings into one section
 2. **Comparison tables**: Whenever 2+ items/concepts/people are compared on the same metric — ALWAYS use a Markdown table, never bullet points
 3. **Bold** every number, answer, correct option, formula, and named classification that an MCQ could directly test
-4. Each section: one Hinglish summary line (max 15 words) + table/bullets below it
+4. Each section: one Hinglish summary line (max 15 words) + content below it
 5. Key exam traps (common confusions, exceptions, "trick" points) — highlight with ⚠️
-6. NO paragraphs, NO conversational language, NO repetition
+6. NO unnecessary paragraphs, NO conversational filler, NO repetition
 7. Include screenshot reference `![](frames/<filename>)` once per section using the most relevant frame
 8. Only skip a topic if it has zero exam-testable content (pure filler). For mock-test/problem-solving videos: EVERY solved question is testable — do NOT skip any
 9. {domain_specific_rule}
-10. **Q&A format for fact points**: Every bullet point MUST follow:
-    `- **Q:** <the question an examiner would ask> → **A:** <the precise answer>`
-    Example: `- **Q:** Statement mein conclusion valid kab hota hai? → **A:** Jab directly statement se derive ho, bahar ki assumption na le`
-    Example: `- ⚠️ **Q:** Common trap kya hai? → **A:** Jo sach lagta ho lekin statement se directly support nahi hota — woh follow nahi karta`
+
+QUESTION TYPE FORMATTING — apply per section based on the [type:...] tag in the input:
+
+**[type:knowledge]** — Use Q→A bullet format:
+- `- **Q:** <the question an examiner would ask> → **A:** <the precise answer>`
+- `- ⚠️ **Q:** <trap question> → **A:** <correct answer>`
+- Use a Markdown table only when comparing 2+ items on the same metric
+
+**[type:math]** — Use tutor's solution approach format:
+- Start with: `**Given:** <the values/data stated in the problem>`
+- Then numbered steps showing the calculation exactly as the tutor explained it:
+  `1. <step description> → <working>`
+  `2. <next step> → <working>`
+  `3. ...`
+- End with: `**Answer: <correct option/value>**`
+- Add `- ⚠️ **Trap:** <common mistake>` if applicable
+- Use a table ONLY if it genuinely helps (e.g. comparing two methods) — do NOT force a table for straight calculations
 
 OUTPUT FORMAT:
 ```
@@ -161,7 +174,8 @@ def _build_topics_block(topics: list[dict]) -> str:
     """Serialize synthesized topics into a compact text block for the prompt."""
     lines = []
     for t in topics:
-        lines.append(f"### {t['heading']}")
+        qt = t.get("question_type", "knowledge")
+        lines.append(f"### {t['heading']} [type:{qt}]")
         lines.append(f"[{t['window_start_sec']}s–{t['window_end_sec']}s | frame: {t['frame_file']}]")
         lines.append(t["content"])
         for kp in t.get("key_points", []):

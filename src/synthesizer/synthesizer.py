@@ -255,12 +255,17 @@ Write clean study notes in Hinglish (natural Hindi-English mix, as a teacher wou
 
 Produce your response in exactly this format:
 HEADING: <short topic heading, 3-8 words>
+QUESTION_TYPE: <exactly one of: math | knowledge>
 CONTENT: <2-5 sentences explaining the concept or problem clearly in Hinglish>
 KEY_POINTS:
 - <key point 1>
 - <key point 2>
 - <key point 3 (optional)>
 - <key point 4 (optional)>
+
+QUESTION_TYPE rules:
+- Use "math" for: any question involving calculation, formula, numbers, percentage, speed-distance-time, LCM/HCF, algebra, series patterns with arithmetic/geometric logic, analogies based on squares/cubes
+- Use "knowledge" for: syllogism, coding-decoding, blood relation, direction sense, alphabetical series (letter-based), statement-conclusion, odd-one-out (non-numeric), GK, history, science facts, Ayurveda concepts
 
 Rules:
 - Write in natural Hinglish — mix Hindi and English as Indian students speak
@@ -283,8 +288,9 @@ Rules:
 
 
 def _parse_response(text: str) -> dict | None:
-    """Parse Claude's HEADING/CONTENT/KEY_POINTS response."""
+    """Parse Claude's HEADING/QUESTION_TYPE/CONTENT/KEY_POINTS response."""
     heading = ""
+    question_type = "knowledge"  # safe default
     content = ""
     key_points = []
     current_section = None
@@ -297,6 +303,10 @@ def _parse_response(text: str) -> dict | None:
         if line.startswith("HEADING:"):
             heading = line[len("HEADING:"):].strip()
             current_section = "heading"
+        elif line.startswith("QUESTION_TYPE:"):
+            qt = line[len("QUESTION_TYPE:"):].strip().lower()
+            question_type = "math" if "math" in qt else "knowledge"
+            current_section = None
         elif line.startswith("CONTENT:"):
             content = line[len("CONTENT:"):].strip()
             current_section = "content"
@@ -304,8 +314,7 @@ def _parse_response(text: str) -> dict | None:
             current_section = "key_points"
         elif line.startswith("-") and current_section == "key_points":
             key_points.append(line[1:].strip())
-        elif current_section == "content" and not line.startswith(("HEADING:", "KEY_POINTS:")):
-            # Multi-line content
+        elif current_section == "content" and not line.startswith(("HEADING:", "QUESTION_TYPE:", "KEY_POINTS:")):
             content = f"{content} {line}".strip()
 
     if heading == "[skip]" or not heading:
@@ -313,6 +322,7 @@ def _parse_response(text: str) -> dict | None:
 
     return {
         "heading": heading,
+        "question_type": question_type,
         "content": content,
         "key_points": key_points,
     }
