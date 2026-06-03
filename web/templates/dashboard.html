@@ -3,106 +3,252 @@
 
 {% block content %}
 
-<!-- Submit form — never polled, never replaced -->
-<div class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 mb-8">
-  <h2 class="text-lg font-bold text-stone-800 mb-4">Extract Study Notes from YouTube</h2>
-  <form hx-post="/api/jobs"
-        hx-ext="json-enc"
-        hx-target="#jobs-sections"
-        hx-swap="none"
-        hx-on::after-request="this.reset(); htmx.trigger('#jobs-sections', 'refresh')"
-        class="flex flex-col sm:flex-row gap-3">
-
-    <input type="url" name="url" required
-           placeholder="https://youtube.com/watch?v=..."
-           class="flex-1 border border-stone-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" />
-
-    <select name="model_size"
-            class="border border-stone-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
-      <option value="">Model: small (default)</option>
-      <option value="tiny">tiny (fastest)</option>
-      <option value="base">base</option>
-      <option value="small">small</option>
-      <option value="medium">medium (better Hindi)</option>
-      <option value="large-v3">large-v3 (best)</option>
-    </select>
-
-    <button type="submit"
-            class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl px-6 py-2 text-sm transition shadow-sm">
-      Extract
-    </button>
-  </form>
-
-  <!-- HTMX json-enc extension for proper JSON POST -->
-  <script src="https://unpkg.com/htmx-ext-json-enc@2.0.1/json-enc.js"></script>
-</div>
-
-<!-- Jobs sections — only this div polls and refreshes -->
-{% set active_jobs = jobs | selectattr('status', 'in', ['queued', 'running']) | list %}
-{% set done_jobs   = jobs | selectattr('status', 'equalto', 'completed') | list %}
-{% set failed_jobs = jobs | selectattr('status', 'equalto', 'failed') | list %}
-
-<div id="jobs-sections"
-     hx-get="/api/dashboard/jobs"
-     hx-trigger="every 4s"
-     hx-swap="outerHTML">
-
-  <!-- Active Jobs -->
-  <section class="mb-8">
-    <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
-      Active Jobs
-      {% if active_jobs %}
-        <span class="ml-2 bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 text-xs">{{ active_jobs | length }}</span>
-      {% endif %}
-    </h3>
-    <div class="space-y-3">
-      {% if active_jobs %}
-        {% for job in active_jobs %}
-          {% include "partials/job_card.html" %}
-        {% endfor %}
-      {% else %}
-        <p class="text-stone-400 text-sm italic py-4 text-center">No active jobs. Submit a URL above to get started.</p>
-      {% endif %}
+<!-- Stats strip -->
+{% set total_jobs = jobs | length %}
+{% set completed_jobs = jobs | selectattr('status', 'equalto', 'completed') | list %}
+{% set active_jobs_count = jobs | selectattr('status', 'in', ['queued', 'running']) | list | length %}
+<div class="grid grid-cols-3 gap-4 mb-8">
+  <div class="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-4 flex items-center gap-4">
+    <span class="text-3xl">📹</span>
+    <div>
+      <p class="text-2xl font-bold text-stone-800">{{ total_jobs }}</p>
+      <p class="text-xs text-stone-500 uppercase tracking-wide">Videos Processed</p>
     </div>
-  </section>
-
-  <!-- Completed / Failed Jobs -->
-  {% if done_jobs or failed_jobs %}
-  <section class="mb-8">
-    <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
-      Completed
-      <span class="ml-2 bg-green-100 text-green-700 rounded-full px-2 py-0.5 text-xs">{{ done_jobs | length }}</span>
-    </h3>
-    <div class="space-y-3">
-      {% for job in done_jobs %}
-        {% include "partials/job_card.html" %}
-      {% endfor %}
-      {% for job in failed_jobs %}
-        {% include "partials/job_card.html" %}
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
-</div>
-
-<!-- Archived (static — only changes after archive action, no polling needed) -->
-{% if archived %}
-<section>
-  <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
-    Archived
-    <span class="ml-2 bg-stone-200 text-stone-600 rounded-full px-2 py-0.5 text-xs">{{ archived | length }}</span>
-  </h3>
-  <div class="flex flex-wrap gap-2">
-    {% for item in archived %}
-    <a href="/archived/{{ item.video_id }}/preview"
-       class="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200 rounded-lg px-3 py-1.5 transition"
-       title="{{ item.title }}">
-      {{ item.title | truncate(40) }}
-    </a>
-    {% endfor %}
   </div>
-</section>
-{% endif %}
+  <div class="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-4 flex items-center gap-4">
+    <span class="text-3xl">📄</span>
+    <div>
+      <p class="text-2xl font-bold text-green-700">{{ completed_jobs | length }}</p>
+      <p class="text-xs text-stone-500 uppercase tracking-wide">Notes Generated</p>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-4 flex items-center gap-4">
+    <span class="text-3xl">🗄️</span>
+    <div>
+      <p class="text-2xl font-bold text-amber-700">{{ archived | length }}</p>
+      <p class="text-xs text-stone-500 uppercase tracking-wide">Archived</p>
+    </div>
+  </div>
+</div>
+
+<!-- Two-column layout: main (left) + sidebar (right) -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+  <!-- ── Main Column ─────────────────────────────────────────── -->
+  <div class="lg:col-span-2 space-y-6">
+
+    <!-- Submit form -->
+    <div class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
+      <h2 class="text-lg font-bold text-stone-800 mb-4">Extract Study Notes from YouTube</h2>
+      <form hx-post="/api/jobs"
+            hx-ext="json-enc"
+            hx-target="#jobs-sections"
+            hx-swap="none"
+            hx-on::after-request="this.reset(); htmx.trigger('#jobs-sections', 'refresh')"
+            class="flex flex-col sm:flex-row gap-3">
+
+        <input type="url" name="url" required
+               placeholder="https://youtube.com/watch?v=..."
+               class="flex-1 border border-stone-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" />
+
+        <select name="model_size"
+                class="border border-stone-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+          <option value="">Model: small (default)</option>
+          <option value="tiny">tiny (fastest)</option>
+          <option value="base">base</option>
+          <option value="small">small</option>
+          <option value="medium">medium (better Hindi)</option>
+          <option value="large-v3">large-v3 (best)</option>
+        </select>
+
+        <button type="submit"
+                class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl px-6 py-2 text-sm transition shadow-sm">
+          Extract
+        </button>
+      </form>
+
+      <!-- HTMX json-enc extension -->
+      <script src="https://unpkg.com/htmx-ext-json-enc@2.0.1/json-enc.js"></script>
+    </div>
+
+    <!-- Jobs sections — only this div polls -->
+    {% set active_jobs = jobs | selectattr('status', 'in', ['queued', 'running']) | list %}
+    {% set done_jobs   = jobs | selectattr('status', 'equalto', 'completed') | list %}
+    {% set failed_jobs = jobs | selectattr('status', 'equalto', 'failed') | list %}
+
+    <div id="jobs-sections"
+         hx-get="/api/dashboard/jobs"
+         hx-trigger="every 4s"
+         hx-swap="outerHTML">
+
+      <!-- Active Jobs -->
+      <section class="mb-6">
+        <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
+          Active Jobs
+          {% if active_jobs %}
+            <span class="ml-2 bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 text-xs">{{ active_jobs | length }}</span>
+          {% endif %}
+        </h3>
+        <div class="space-y-3">
+          {% if active_jobs %}
+            {% for job in active_jobs %}
+              {% include "partials/job_card.html" %}
+            {% endfor %}
+          {% else %}
+            <p class="text-stone-400 text-sm italic py-4 text-center">No active jobs. Submit a URL above to get started.</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <!-- Completed / Failed Jobs -->
+      {% if done_jobs or failed_jobs %}
+      <section class="mb-6">
+        <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
+          Completed
+          <span class="ml-2 bg-green-100 text-green-700 rounded-full px-2 py-0.5 text-xs">{{ done_jobs | length }}</span>
+        </h3>
+        <div class="space-y-3">
+          {% for job in done_jobs %}
+            {% include "partials/job_card.html" %}
+          {% endfor %}
+          {% for job in failed_jobs %}
+            {% include "partials/job_card.html" %}
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+    </div>
+
+    <!-- Archived (static) -->
+    {% if archived %}
+    <section>
+      <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
+        Archived
+        <span class="ml-2 bg-stone-200 text-stone-600 rounded-full px-2 py-0.5 text-xs">{{ archived | length }}</span>
+      </h3>
+      <div class="flex flex-wrap gap-2">
+        {% for item in archived %}
+        <a href="/archived/{{ item.video_id }}/preview"
+           class="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200 rounded-lg px-3 py-1.5 transition"
+           title="{{ item.title }}">
+          {{ item.title | truncate(40) }}
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+  </div><!-- end main column -->
+
+  <!-- ── Sidebar ─────────────────────────────────────────────── -->
+  <div class="lg:col-span-1 space-y-5">
+
+    <!-- How it works -->
+    <div class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+      <h3 class="text-sm font-bold text-stone-700 uppercase tracking-wider mb-4">How It Works</h3>
+      <ol class="space-y-3">
+        <li class="flex items-start gap-3">
+          <span class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">1</span>
+          <div>
+            <p class="text-sm font-semibold text-stone-700">Download Video</p>
+            <p class="text-xs text-stone-400">yt-dlp fetches video + metadata</p>
+          </div>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">2</span>
+          <div>
+            <p class="text-sm font-semibold text-stone-700">Extract Audio</p>
+            <p class="text-xs text-stone-400">ffmpeg strips mono 16kHz audio</p>
+          </div>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">3</span>
+          <div>
+            <p class="text-sm font-semibold text-stone-700">Transcribe</p>
+            <p class="text-xs text-stone-400">Whisper converts speech → timestamped text</p>
+          </div>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">4</span>
+          <div>
+            <p class="text-sm font-semibold text-stone-700">Extract Frames</p>
+            <p class="text-xs text-stone-400">Scene-change detection captures slides</p>
+          </div>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">5</span>
+          <div>
+            <p class="text-sm font-semibold text-stone-700">OCR + Vision</p>
+            <p class="text-xs text-stone-400">Tesseract reads slide text; Claude Vision as fallback</p>
+          </div>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">6</span>
+          <div>
+            <p class="text-sm font-semibold text-stone-700">Align</p>
+            <p class="text-xs text-stone-400">Merges transcript + frames by timestamp</p>
+          </div>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">7</span>
+          <div>
+            <p class="text-sm font-semibold text-stone-700">Synthesize</p>
+            <p class="text-xs text-stone-400">Claude writes Hinglish notes per segment</p>
+          </div>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="flex-shrink-0 w-7 h-7 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center">8</span>
+          <div>
+            <p class="text-sm font-semibold text-stone-700">Generate Cheat Sheet</p>
+            <p class="text-xs text-stone-400">Full-context restructuring into exam-ready Markdown</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <!-- Tips -->
+    <div class="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-5">
+      <h3 class="text-sm font-bold text-amber-800 uppercase tracking-wider mb-3">💡 Tips</h3>
+      <ul class="space-y-2 text-xs text-amber-900">
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5">🎯</span>
+          <span>Use <strong>medium</strong> model for Hindi-heavy lectures — better accuracy than small</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5">⚡</span>
+          <span>Use <strong>tiny</strong> for quick previews — 3× faster, good enough for English</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5">🔁</span>
+          <span>Pipeline is <strong>idempotent</strong> — resubmitting the same URL resumes from where it left off</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5">📦</span>
+          <span><strong>Archive</strong> a completed job to free up disk space while keeping the notes</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5">🌿</span>
+          <span>Sanskrit terms and Acharya comparisons are auto-formatted as tables in Ayurveda videos</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Supported content types -->
+    <div class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+      <h3 class="text-sm font-bold text-stone-700 uppercase tracking-wider mb-3">Supported Content</h3>
+      <div class="flex flex-wrap gap-2">
+        <span class="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-3 py-1">🌿 Ayurveda / AIAPGET</span>
+        <span class="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-3 py-1">🧮 SSC / Reasoning</span>
+        <span class="text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-3 py-1">📐 Mathematics</span>
+        <span class="text-xs bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-3 py-1">📚 GK / History</span>
+        <span class="text-xs bg-stone-50 text-stone-600 border border-stone-200 rounded-full px-3 py-1">🔬 Science</span>
+        <span class="text-xs bg-pink-50 text-pink-700 border border-pink-200 rounded-full px-3 py-1">🗣️ Hindi / Hinglish</span>
+      </div>
+    </div>
+
+  </div><!-- end sidebar -->
+
+</div><!-- end two-column grid -->
 
 {% endblock %}
