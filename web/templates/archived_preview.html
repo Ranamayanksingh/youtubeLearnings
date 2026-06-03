@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Preview{% endblock %}
+
+{% block content %}
+
+<div class="mb-4 flex items-center justify-between">
+  <a href="/archived" class="text-sm text-amber-600 hover:text-amber-800 transition">← Archived Notes</a>
+  <a href="/archived/{{ video_id }}/download"
+     class="text-sm bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl px-4 py-2 transition">
+    Download .md
+  </a>
+</div>
+
+<div class="bg-white rounded-2xl shadow-sm border border-stone-200 px-6 py-4 mb-6">
+  <h1 class="text-xl font-bold text-stone-800">{{ title }}</h1>
+  {% if url %}
+  <a href="{{ url }}" target="_blank" class="text-xs text-amber-600 hover:underline">{{ url }}</a>
+  {% endif %}
+</div>
+
+<article class="bg-white rounded-2xl shadow-sm border border-stone-200 px-8 py-6">
+  <base href="/api/archived/{{ video_id }}/frames/" />
+  <div class="prose prose-stone prose-headings:text-amber-800 prose-a:text-amber-600 prose-table:text-sm max-w-none">
+    {{ rendered_html | safe }}
+  </div>
+</article>
+
+{% endblock %}

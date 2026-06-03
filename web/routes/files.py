@@ -7,10 +7,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-router = APIRouter(prefix="/api/jobs")
+router = APIRouter(prefix="/api")
 
 
-@router.get("/{job_id}/notes")
+@router.get("/jobs/{job_id}/notes")
 async def download_notes(job_id: str):
     """Download the raw study_notes.md for an active job."""
     # job_id here is the short UUID — we need the video_id to find output/
@@ -32,15 +32,25 @@ async def download_notes(job_id: str):
     )
 
 
-@router.get("/{video_id}/frames/{filename}")
+@router.get("/jobs/{video_id}/frames/{filename}")
 async def serve_frame(video_id: str, filename: str):
     """Serve a frame image from output/<video_id>/frames/<filename>."""
-    # Prevent path traversal
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     frame_path = Path("output") / video_id / "frames" / filename
     if not frame_path.exists():
         frame_path = Path("final") / video_id / "frames" / filename
+    if not frame_path.exists():
+        raise HTTPException(status_code=404, detail="Frame not found")
+    return FileResponse(path=str(frame_path), media_type="image/jpeg")
+
+
+@router.get("/archived/{video_id}/frames/{filename}")
+async def serve_archived_frame(video_id: str, filename: str):
+    """Serve a frame image from final/<video_id>/frames/<filename>."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    frame_path = Path("final") / video_id / "frames" / filename
     if not frame_path.exists():
         raise HTTPException(status_code=404, detail="Frame not found")
     return FileResponse(path=str(frame_path), media_type="image/jpeg")

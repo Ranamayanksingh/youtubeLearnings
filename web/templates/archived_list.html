@@ -19,10 +19,16 @@
       {% endif %}
       <p class="text-xs text-stone-400 font-mono mt-1">{{ item.video_id }}</p>
     </div>
-    <a href="/archived/{{ item.video_id }}/download"
-       class="shrink-0 text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-lg px-3 py-1.5 transition">
-      Download .md
-    </a>
+    <div class="flex gap-2 shrink-0">
+      <a href="/archived/{{ item.video_id }}/preview"
+         class="text-sm bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 transition">
+        Preview
+      </a>
+      <a href="/archived/{{ item.video_id }}/download"
+         class="text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-lg px-3 py-1.5 transition">
+        Download .md
+      </a>
+    </div>
   </div>
   {% endfor %}
 </div>

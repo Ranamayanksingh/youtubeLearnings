@@ -95,6 +95,36 @@ async def archived_page(request: Request):
     )
 
 
+@router.get("/archived/{video_id}/preview", response_class=HTMLResponse)
+async def preview_archived(video_id: str, request: Request):
+    templates = request.app.state.templates
+    notes_path = Path("final") / video_id / "study_notes.md"
+    if not notes_path.exists():
+        raise HTTPException(status_code=404, detail="Archived notes not found")
+
+    info_file = Path("final") / video_id / "video_info.json"
+    info = {}
+    if info_file.exists():
+        with open(info_file, encoding="utf-8") as f:
+            info = json.load(f)
+
+    content = notes_path.read_text(encoding="utf-8")
+    rendered_html = md_lib.markdown(
+        content,
+        extensions=["tables", "fenced_code", "nl2br"],
+    )
+
+    return templates.TemplateResponse(
+        request, "archived_preview.html",
+        {
+            "video_id": video_id,
+            "title": info.get("title", video_id),
+            "url": info.get("url", ""),
+            "rendered_html": rendered_html,
+        },
+    )
+
+
 @router.get("/archived/{video_id}/download")
 async def download_archived(video_id: str):
     notes_path = Path("final") / video_id / "study_notes.md"
