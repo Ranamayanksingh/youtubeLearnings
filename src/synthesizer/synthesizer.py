@@ -22,6 +22,10 @@ _TEMPERATURE = 0.3
 MIN_WINDOW_SECS = 15       # windows shorter than this are merged with next
 MIN_TRANSCRIPT_CHARS = 10  # windows with less speech than this are merged
 
+# Domain detection: ask Claude once what kind of video this is, then use a
+# tailored prompt for each segment. Cached per synthesize() call.
+_DOMAIN_CACHE: dict[str, str] = {}
+
 
 def synthesize(video_id: str, output_dir: Path) -> dict:
     """
@@ -58,6 +62,15 @@ def synthesize(video_id: str, output_dir: Path) -> dict:
         f"{len(merged)} after merging short/empty windows"
     )
 
+    # Detect subject domain once for the whole video
+    sample_transcript = " ".join(
+        t["text"]
+        for seg in merged[:3]
+        for t in seg["transcript"]
+    )[:1500]
+    domain = _detect_domain(client, title, sample_transcript)
+    logger.info(f"[{video_id}] Detected domain: {domain}")
+
     topics = []
     prev_heading = None
 
@@ -66,7 +79,7 @@ def synthesize(video_id: str, output_dir: Path) -> dict:
             f"[{video_id}] Synthesizing segment {i + 1}/{len(merged)} "
             f"[{seg['window_start_sec']}s → {seg['window_end_sec']}s]..."
         )
-        result = _synthesize_segment(client, title, seg, prev_heading)
+        result = _synthesize_segment(client, title, seg, prev_heading, domain)
 
         if result is None:
             logger.info(f"[{video_id}]   → skipped (no useful content)")
@@ -82,6 +95,7 @@ def synthesize(video_id: str, output_dir: Path) -> dict:
     synthesized = {
         "video_id": video_id,
         "title": title,
+        "domain": domain,
         "total_topics": len(topics),
         "topics": topics,
     }
@@ -159,6 +173,33 @@ def _merge_two(earlier: dict, later: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Domain detection
+# ---------------------------------------------------------------------------
+
+def _detect_domain(client: anthropic.Anthropic, title: str, sample_text: str) -> str:
+    """
+    Ask Claude to identify the subject domain of the video in one short call.
+    Returns a short domain label like "ayurveda", "reasoning/aptitude", "mathematics", etc.
+    """
+    prompt = f"""Video title: {title}
+
+Sample transcript (first few minutes):
+{sample_text}
+
+In 3-5 words, what is the subject domain of this video?
+Examples: "Ayurveda medical exam prep", "SSC reasoning mock test", "Physics lecture", "History competitive exam", "Mathematics problem solving"
+Reply with ONLY the domain label, nothing else."""
+
+    msg = client.messages.create(
+        model=_MODEL,
+        max_tokens=20,
+        temperature=0,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text.strip()
+
+
+# ---------------------------------------------------------------------------
 # Claude synthesis per segment
 # ---------------------------------------------------------------------------
 
@@ -167,6 +208,7 @@ def _synthesize_segment(
     title: str,
     segment: dict,
     prev_heading: str | None,
+    domain: str = "educational lecture",
 ) -> dict | None:
     """
     Call Claude to synthesize one segment into study notes.
@@ -183,8 +225,23 @@ def _synthesize_segment(
     if vision_desc:
         visual_context = f"{ocr_text}\n[Visual description: {vision_desc}]"
 
-    prompt = f"""You are creating study notes from an Ayurveda lecture video.
+    # Domain-specific instructions injected into the prompt
+    is_ayurveda = "ayurveda" in domain.lower()
+    if is_ayurveda:
+        domain_rules = """- PRESERVE all Sanskrit and Ayurvedic technical terms exactly as they appear in the slide text (Devanagari script). E.g. write "प्रमेह पिडिका" not "Prameh Pidika"
+- After each Sanskrit term, add the Roman transliteration in parentheses on first use. E.g. "धूमपान (Dhoompaan)"
+- For Acharya names, use both scripts: "चरक (Charaka)", "सुश्रुत (Sushruta)", "वाग्भट (Vagbhata)"
+- Comparison of Acharyas on any metric → list as bullet points here (the generator will make the table)"""
+    else:
+        domain_rules = """- Extract EVERY solved problem, question, formula, or concept taught — even if the teacher is just explaining one step
+- For mock test / problem-solving videos: each distinct question or concept is a valid topic, do NOT skip them
+- Preserve exact numbers, options, answer choices as stated
+- If the teacher solves a problem, capture: the problem type, the method used, and the correct answer
+- For reasoning/aptitude: name the question type (coding-decoding, syllogism, blood relation, etc.)"""
 
+    prompt = f"""You are creating study notes from a video lecture.
+
+Domain: {domain}
 Video: {title}
 Previous topic: {prev_heading or "N/A (this is the first topic)"}
 
@@ -198,7 +255,7 @@ Write clean study notes in Hinglish (natural Hindi-English mix, as a teacher wou
 
 Produce your response in exactly this format:
 HEADING: <short topic heading, 3-8 words>
-CONTENT: <2-5 sentences explaining the concept clearly in Hinglish>
+CONTENT: <2-5 sentences explaining the concept or problem clearly in Hinglish>
 KEY_POINTS:
 - <key point 1>
 - <key point 2>
@@ -207,18 +264,17 @@ KEY_POINTS:
 
 Rules:
 - Write in natural Hinglish — mix Hindi and English as Indian students speak
-- PRESERVE all Sanskrit and Ayurvedic technical terms exactly as they appear in the slide text (Devanagari script) — do NOT transliterate them to Roman. E.g. write "प्रमेह पिडिका" not "Prameh Pidika", "धूमपान" not "Dhoompaan", "विद्रधि" not "Vidradhi"
-- After each Sanskrit term, add the Roman transliteration in parentheses on first use. E.g. "धूमपान (Dhoompaan)"
-- For Acharya names, use both scripts: "चरक (Charaka)", "सुश्रुत (Sushruta)", "वाग्भट (Vagbhata)"
-- Ignore garbled OCR text, symbols, and transcription noise — but if a Devanagari word looks like a valid Sanskrit term, preserve it
+- Ignore garbled OCR text and transcription noise
 - If slide and speech conflict, prefer the speech
-- If this window has no useful educational content (just intro/outro/blank), respond with exactly: HEADING: [skip]
+- ONLY skip if this window is PURELY intro/outro/blank with zero teaching content (e.g. only "subscribe", "like", "hello everyone", "see you next class" with nothing else)
+- If there is ANY teaching, problem-solving, or explanation — extract it, do NOT skip
 - Do not invent facts not present in the input
-- Keep key points concise — one line each"""
+- Keep key points concise — one line each
+{domain_rules}"""
 
     message = client.messages.create(
         model=_MODEL,
-        max_tokens=600,
+        max_tokens=800,
         temperature=_TEMPERATURE,
         messages=[{"role": "user", "content": prompt}],
     )

@@ -21,8 +21,9 @@ _MODEL = "claude-sonnet-4-6"
 _TEMPERATURE = 0.2  # lower than synthesizer — we want consistent, precise output
 
 
-_PROMPT_TEMPLATE = """You are creating an exam-ready cheat sheet for an Ayurveda student preparing for AIAPGET/competitive exams.
+_PROMPT_TEMPLATE = """You are creating an exam-ready cheat sheet from a video lecture.
 
+Domain: {domain}
 Video: {title}
 URL: {url}
 
@@ -36,19 +37,18 @@ Your task: Rewrite this as a precise, scannable Markdown cheat sheet.
 
 STRICT RULES:
 1. **Merge** topics with the same or closely related headings into one section
-2. **Comparison tables**: Whenever 2+ Acharyas (Charaka, Sushruta, Vagbhata, etc.) are compared on the same metric — ALWAYS use a Markdown table, never bullet points
-3. **Bold** every number, measurement, count, and named classification that an MCQ could directly test
+2. **Comparison tables**: Whenever 2+ items/concepts/people are compared on the same metric — ALWAYS use a Markdown table, never bullet points
+3. **Bold** every number, answer, correct option, formula, and named classification that an MCQ could directly test
 4. Each section: one Hinglish summary line (max 15 words) + table/bullets below it
-5. Key exam traps (common confusions, exceptions, "Vagbhata ne alag kiya" type points) — highlight with ⚠️
+5. Key exam traps (common confusions, exceptions, "trick" points) — highlight with ⚠️
 6. NO paragraphs, NO conversational language, NO repetition
 7. Include screenshot reference `![](frames/<filename>)` once per section using the most relevant frame
-8. If a topic has no exam-testable facts after cleaning, skip it entirely
-9. **Sanskrit terms**: Always use Devanagari script for Sanskrit/Ayurvedic technical terms — this is how they appear in exams. Format: "धूमपान (Dhoompaan)", "प्रमेह पिडिका (Prameh Pidika)", "विद्रधि (Vidradhi)". In table headers and cells use Devanagari first, Roman in parentheses. Acharya names: "चरक (Charaka)", "सुश्रुत (Sushruta)", "वाग्भट (Vagbhata)", "काश्यप (Kashyapa)"
-10. **Q&A format for fact points**: Every bullet point under a section and under "Exam points" MUST follow this format:
+8. Only skip a topic if it has zero exam-testable content (pure filler). For mock-test/problem-solving videos: EVERY solved question is testable — do NOT skip any
+9. {domain_specific_rule}
+10. **Q&A format for fact points**: Every bullet point MUST follow:
     `- **Q:** <the question an examiner would ask> → **A:** <the precise answer>`
-    Example: `- **Q:** Article 32 kya deta hai? → **A:** Supreme Court ko writs issue karne ka adhikar (Right to Constitutional Remedies)`
-    Example: `- ⚠️ **Q:** Emergency provisions kahan se li gayi hain? → **A:** **Germany** se (NOT UK/USA)`
-    This applies to ALL bullet points — in tables the Answer column already serves this purpose, but standalone bullets must always have the Q→A format.
+    Example: `- **Q:** Statement mein conclusion valid kab hota hai? → **A:** Jab directly statement se derive ho, bahar ki assumption na le`
+    Example: `- ⚠️ **Q:** Common trap kya hai? → **A:** Jo sach lagta ho lekin statement se directly support nahi hota — woh follow nahi karta`
 
 OUTPUT FORMAT:
 ```
@@ -99,10 +99,26 @@ def generate(video_id: str, output_dir: Path) -> Path:
     if not topics:
         raise ValueError(f"[{video_id}] No topics in synthesized.json.")
 
-    title = metadata.get("title", "Ayurveda Lecture")
+    title = metadata.get("title", "Lecture")
     url = metadata.get("url", "")
     duration_sec = metadata.get("duration_seconds", 0)
     duration = _format_duration(duration_sec)
+    domain = synthesized.get("domain", "educational lecture")
+
+    is_ayurveda = "ayurveda" in domain.lower()
+    if is_ayurveda:
+        domain_specific_rule = (
+            "**Sanskrit terms**: Always use Devanagari script for Sanskrit/Ayurvedic terms — "
+            "format: \"धूमपान (Dhoompaan)\", \"प्रमेह पिडिका (Prameh Pidika)\". "
+            "Acharya names: \"चरक (Charaka)\", \"सुश्रुत (Sushruta)\", \"वाग्भट (Vagbhata)\". "
+            "Acharya comparisons → ALWAYS use a table"
+        )
+    else:
+        domain_specific_rule = (
+            "For each solved problem/question: state the question type, the approach/trick used, "
+            "and the correct answer. Number each question if the video covers multiple questions. "
+            "Do NOT merge different problems together — each question gets its own section"
+        )
 
     topics_block = _build_topics_block(topics)
 
@@ -110,6 +126,8 @@ def generate(video_id: str, output_dir: Path) -> Path:
         title=title,
         url=url,
         duration=duration,
+        domain=domain,
+        domain_specific_rule=domain_specific_rule,
         topics_block=topics_block,
     )
 
