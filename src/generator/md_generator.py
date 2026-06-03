@@ -133,36 +133,66 @@ def generate(video_id: str, output_dir: Path) -> Path:
             "Do NOT merge different problems together — each question gets its own section"
         )
 
-    topics_block = _build_topics_block(topics)
-
-    prompt = _PROMPT_TEMPLATE.format(
-        title=title,
-        url=url,
-        duration=duration,
-        domain=domain,
-        domain_specific_rule=domain_specific_rule,
-        topics_block=topics_block,
-    )
+    client = anthropic.Anthropic(api_key=api_key)
 
     logger.info(f"[{video_id}] Generating exam cheat sheet ({len(topics)} topics)...")
 
-    client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model=_MODEL,
-        max_tokens=4096,
-        temperature=_TEMPERATURE,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    # Split into batches of BATCH_SIZE topics so we never hit the output token limit.
+    # Each batch produces standalone ## sections; we stitch them together.
+    BATCH_SIZE = 10
+    batches = [topics[i:i + BATCH_SIZE] for i in range(0, len(topics), BATCH_SIZE)]
+    all_sections: list[str] = []
 
-    md_content = message.content[0].text.strip()
+    for batch_idx, batch in enumerate(batches):
+        logger.info(
+            f"[{video_id}] Batch {batch_idx + 1}/{len(batches)} "
+            f"({len(batch)} topics)..."
+        )
+        topics_block = _build_topics_block(batch)
+        prompt = _PROMPT_TEMPLATE.format(
+            title=title,
+            url=url,
+            duration=duration,
+            domain=domain,
+            domain_specific_rule=domain_specific_rule,
+            topics_block=topics_block,
+        )
+        message = client.messages.create(
+            model=_MODEL,
+            max_tokens=8096,
+            temperature=_TEMPERATURE,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        chunk = message.content[0].text.strip()
 
-    # Strip markdown code fences if Claude wrapped output in ```markdown ... ```
-    if md_content.startswith("```"):
-        lines = md_content.splitlines()
-        md_content = "\n".join(
-            line for line in lines
-            if not line.strip().startswith("```")
-        ).strip()
+        # Strip markdown code fences if Claude wrapped output in ```markdown ... ```
+        if chunk.startswith("```"):
+            lines = chunk.splitlines()
+            chunk = "\n".join(
+                line for line in lines
+                if not line.strip().startswith("```")
+            ).strip()
+
+        # First batch includes the full header; subsequent batches strip it
+        # (the header is everything before the first `---\n\n##` section)
+        if batch_idx == 0:
+            all_sections.append(chunk)
+        else:
+            # Drop any title/header lines Claude may have repeated
+            lines = chunk.splitlines()
+            # Find the first `## ` heading and keep from there
+            for i, line in enumerate(lines):
+                if line.startswith("## "):
+                    all_sections.append("\n".join(lines[i:]))
+                    break
+            else:
+                all_sections.append(chunk)
+
+    md_content = "\n\n---\n\n".join(all_sections)
+
+    # Ensure file ends cleanly
+    if not md_content.endswith("\n"):
+        md_content += "\n"
 
     output_file.write_text(md_content, encoding="utf-8")
 
