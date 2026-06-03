@@ -68,6 +68,11 @@ def archive(video_id: str) -> Path:
     logger.info(f"[{video_id}] Written video_info.json")
 
     logger.info(f"[{video_id}] ✓ Archived to {final_video_dir}/")
+
+    # Delete output/<video_id>/ after successful archive
+    shutil.rmtree(out_dir)
+    logger.info(f"[{video_id}] Deleted output/{video_id}/")
+
     return final_video_dir
 
 
