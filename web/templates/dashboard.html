@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Ayurveda Study Notes{% endblock %}
+
+{% block content %}
+
+<!-- Submit form -->
+<div class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 mb-8">
+  <h2 class="text-lg font-bold text-stone-800 mb-4">Extract Study Notes from YouTube</h2>
+  <form hx-post="/api/jobs"
+        hx-ext="json-enc"
+        hx-target="#active-jobs-list"
+        hx-swap="afterbegin"
+        hx-on::after-request="this.reset()"
+        class="flex flex-col sm:flex-row gap-3">
+
+    <input type="url" name="url" required
+           placeholder="https://youtube.com/watch?v=..."
+           class="flex-1 border border-stone-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" />
+
+    <select name="model_size"
+            class="border border-stone-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+      <option value="">Model: small (default)</option>
+      <option value="tiny">tiny (fastest)</option>
+      <option value="base">base</option>
+      <option value="small">small</option>
+      <option value="medium">medium (better Hindi)</option>
+      <option value="large-v3">large-v3 (best)</option>
+    </select>
+
+    <button type="submit"
+            class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl px-6 py-2 text-sm transition shadow-sm">
+      Extract
+    </button>
+  </form>
+
+  <!-- HTMX json-enc extension for proper JSON POST -->
+  <script src="https://unpkg.com/htmx-ext-json-enc@2.0.1/json-enc.js"></script>
+</div>
+
+<!-- Active / Running Jobs -->
+{% set active_jobs = jobs | selectattr('status', 'in', ['queued', 'running']) | list %}
+{% set done_jobs = jobs | selectattr('status', 'equalto', 'completed') | list %}
+{% set failed_jobs = jobs | selectattr('status', 'equalto', 'failed') | list %}
+
+<section class="mb-8">
+  <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
+    Active Jobs
+    {% if active_jobs %}<span class="ml-2 bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 text-xs">{{ active_jobs | length }}</span>{% endif %}
+  </h3>
+
+  <div id="active-jobs-list"
+       hx-get="/api/jobs"
+       hx-trigger="every 4s"
+       hx-target="#jobs-all"
+       hx-swap="outerHTML"
+       class="space-y-3">
+    {% if active_jobs %}
+      {% for job in active_jobs %}
+        {% include "partials/job_card.html" %}
+      {% endfor %}
+    {% else %}
+      <p class="text-stone-400 text-sm italic py-4 text-center">No active jobs. Submit a URL above to get started.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Completed Jobs -->
+{% if done_jobs or failed_jobs %}
+<section class="mb-8">
+  <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
+    Completed
+    <span class="ml-2 bg-green-100 text-green-700 rounded-full px-2 py-0.5 text-xs">{{ done_jobs | length }}</span>
+  </h3>
+  <div class="space-y-3">
+    {% for job in done_jobs %}
+      {% include "partials/job_card.html" %}
+    {% endfor %}
+    {% for job in failed_jobs %}
+      {% include "partials/job_card.html" %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- Archived -->
+{% if archived %}
+<section>
+  <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">
+    Archived
+    <span class="ml-2 bg-stone-200 text-stone-600 rounded-full px-2 py-0.5 text-xs">{{ archived | length }}</span>
+  </h3>
+  <div class="flex flex-wrap gap-2">
+    {% for item in archived %}
+    <a href="/archived/{{ item.video_id }}/download"
+       class="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200 rounded-lg px-3 py-1.5 transition"
+       title="{{ item.title }}">
+      {{ item.title | truncate(40) }}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div id="jobs-all" style="display:none"></div>
+
+<script>
+  // Auto-refresh the page sections when poll returns new job data
+  document.body.addEventListener('htmx:afterRequest', function(evt) {
+    if (evt.detail.pathInfo && evt.detail.pathInfo.requestPath === '/api/jobs') {
+      window.location.reload();
+    }
+  });
+</script>
+
+{% endblock %}

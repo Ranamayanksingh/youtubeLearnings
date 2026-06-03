@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title or 'Notes' }} — Preview{% endblock %}
+
+{% block content %}
+
+<div class="mb-4 flex items-center justify-between">
+  <a href="/jobs/{{ job.job_id }}" class="text-sm text-amber-600 hover:text-amber-800 transition">← Back to Job</a>
+
+  <div class="flex gap-2">
+    <a href="/jobs/{{ job.job_id }}/download"
+       class="text-sm bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl px-4 py-2 transition">
+      Download .md
+    </a>
+    <button
+      hx-post="/api/jobs/{{ job.job_id }}/archive"
+      hx-confirm="Archive {{ job.title or job.video_id }} and delete output/? This cannot be undone."
+      hx-on::after-request="window.location.href='/archived'"
+      class="text-sm bg-white hover:bg-stone-50 text-stone-700 border border-stone-300 rounded-xl px-4 py-2 transition">
+      Archive
+    </button>
+  </div>
+</div>
+
+<!-- Notes title -->
+<div class="bg-white rounded-2xl shadow-sm border border-stone-200 px-6 py-4 mb-6">
+  <h1 class="text-xl font-bold text-stone-800">{{ job.title or 'Study Notes' }}</h1>
+  {% if job.metadata.get('url') %}
+  <a href="{{ job.metadata.url }}" target="_blank" class="text-xs text-amber-600 hover:underline">
+    {{ job.metadata.url }}
+  </a>
+  {% endif %}
+</div>
+
+<!-- Rendered Markdown -->
+<article class="bg-white rounded-2xl shadow-sm border border-stone-200 px-8 py-6">
+  <!--
+    Frame images in study_notes.md look like: ![](frames/0001_t00m32s.jpg)
+    We serve them from: /api/jobs/<video_id>/frames/<filename>
+    The rendered HTML uses src="frames/..." so we rewrite via base tag below.
+  -->
+  <base href="{{ frames_base }}" />
+
+  <div class="prose prose-stone prose-headings:text-amber-800 prose-a:text-amber-600 prose-table:text-sm max-w-none">
+    {{ rendered_html | safe }}
+  </div>
+</article>
+
+{% endblock %}

@@ -1,0 +1,17 @@
+{# Live log tail — polled separately or included in progress_panel context #}
+{% set is_active = job.status in ('queued', 'running') %}
+
+<div id="log-panel"
+     {% if is_active %}
+       hx-get="/api/jobs/{{ job.job_id }}/status"
+       hx-trigger="every 3s"
+       hx-target="#log-panel"
+       hx-swap="outerHTML"
+     {% endif %}
+     class="bg-stone-900 rounded-xl p-4 font-mono text-xs text-stone-300 h-48 overflow-y-auto">
+  {% for line in job.log_lines[-40:] %}
+  <div class="leading-relaxed">{{ line }}</div>
+  {% else %}
+  <div class="text-stone-500 italic">Waiting for pipeline to start...</div>
+  {% endfor %}
+</div>

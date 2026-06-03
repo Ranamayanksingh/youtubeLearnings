@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Ayurveda Study Notes{% endblock %}</title>
+
+  <!-- Tailwind CSS + Typography plugin via CDN -->
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            saffron: { 50: '#fff8f0', 100: '#ffecd6', 400: '#f59e0b', 500: '#d97706', 600: '#b45309' },
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+
+  <style>
+    /* Smooth progress bar */
+    .progress-bar { transition: width 0.6s ease; }
+    /* Spinning step indicator */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
+  </style>
+</head>
+<body class="h-full bg-stone-50 text-stone-900 font-sans">
+
+  <!-- Nav -->
+  <header class="bg-gradient-to-r from-amber-700 to-orange-600 shadow-md">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2 text-white font-bold text-lg tracking-tight">
+        <span class="text-2xl">🌿</span>
+        <span>Ayurveda Study Notes</span>
+      </a>
+      <nav class="flex gap-4 text-sm text-amber-100">
+        <a href="/" class="hover:text-white transition">Dashboard</a>
+        <a href="/archived" class="hover:text-white transition">Archived</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="mt-16 py-4 text-center text-stone-400 text-xs">
+    Ayurveda Learning Project &mdash; AIAPGET Prep Tool
+  </footer>
+
+</body>
+</html>

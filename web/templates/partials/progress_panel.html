@@ -1,0 +1,76 @@
+{#
+  progress_panel.html — Polled by HTMX every 2s while job is active.
+  When job completes/fails, HTMX attributes are omitted → polling stops.
+#}
+{% set is_active = job.status in ('queued', 'running') %}
+
+<div id="progress-panel"
+     {% if is_active %}
+       hx-get="/api/jobs/{{ job.job_id }}/status"
+       hx-trigger="every 2s"
+       hx-swap="outerHTML"
+     {% endif %}>
+
+  <!-- Step checklist -->
+  <div class="space-y-2 mb-6">
+    {% for step in job.steps %}
+    <div class="flex items-center gap-3">
+      <div class="w-6 shrink-0 text-center">
+        {% if step.status == 'completed' %}
+          <span class="text-green-500 font-bold">✓</span>
+        {% elif step.status == 'running' %}
+          <span class="spin text-amber-500">⟳</span>
+        {% elif step.status == 'failed' %}
+          <span class="text-red-500">✗</span>
+        {% else %}
+          <span class="text-stone-300">○</span>
+        {% endif %}
+      </div>
+
+      <div class="flex-1 flex items-center justify-between">
+        <span class="text-sm {% if step.status == 'completed' %}text-stone-600{% elif step.status == 'running' %}text-amber-700 font-semibold{% elif step.status == 'failed' %}text-red-600{% else %}text-stone-400{% endif %}">
+          Step {{ step.index }}/8 &mdash; {{ step.name }}
+          {% if step.status == 'running' %}<span class="text-xs font-normal ml-1 text-amber-500">(in progress)</span>{% endif %}
+        </span>
+        {% if step.duration_s is not none %}
+        <span class="text-xs text-stone-400">{{ step.duration_s | int }}s</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Progress bar -->
+  {% set pct = job.progress_pct() | int %}
+  <div class="mb-2 flex justify-between text-xs text-stone-400">
+    <span>{{ pct }}% complete</span>
+    <span>{{ (job.elapsed_s() / 60) | int }}m {{ (job.elapsed_s() % 60) | int }}s elapsed</span>
+  </div>
+  <div class="w-full bg-stone-100 rounded-full h-3 mb-6">
+    <div class="progress-bar h-3 rounded-full
+      {% if job.status == 'completed' %}bg-green-500
+      {% elif job.status == 'failed' %}bg-red-400
+      {% else %}bg-gradient-to-r from-amber-400 to-orange-500
+      {% endif %}"
+      style="width: {{ pct if pct > 2 else 2 }}%"></div>
+  </div>
+
+  <!-- Status badge -->
+  <div class="text-sm font-medium
+    {% if job.status == 'completed' %}text-green-600
+    {% elif job.status == 'failed' %}text-red-600
+    {% elif job.status == 'running' %}text-amber-600
+    {% else %}text-stone-500
+    {% endif %}">
+    {% if job.status == 'completed' %}
+      Pipeline complete!
+    {% elif job.status == 'failed' %}
+      Failed: {{ job.error | truncate(120) if job.error else 'Unknown error' }}
+    {% elif job.status == 'running' %}
+      {{ job.current_step_name() }}...
+    {% else %}
+      Queued
+    {% endif %}
+  </div>
+
+</div>
