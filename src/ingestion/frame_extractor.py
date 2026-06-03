@@ -17,10 +17,11 @@ from scenedetect.detectors import ContentDetector
 logger = logging.getLogger(__name__)
 
 # Tuning constants
-CONTENT_THRESHOLD = 27.0       # lower = more sensitive to changes
-MIN_SCENE_LENGTH_SECS = 3      # ignore scenes shorter than this
+CONTENT_THRESHOLD = 18.0       # lowered from 27 — catches slide transitions, not just dramatic cuts
+MIN_SCENE_LENGTH_SECS = 2      # ignore scenes shorter than this (avoid flicker noise)
 FALLBACK_INTERVAL_SECS = 60    # fixed interval if scene detection yields too few frames
 MIN_SCENES_THRESHOLD = 3       # if fewer scenes than this, trigger fallback
+MAX_GAP_SECS = 90              # never go more than this many seconds without a frame (gap fill)
 
 
 def extract(video_id: str, output_dir: Path) -> list[dict]:
@@ -48,6 +49,7 @@ def extract(video_id: str, output_dir: Path) -> list[dict]:
     frames_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"[{video_id}] Detecting scene changes...")
+    duration = _get_duration(str(video_file))
     timestamps = _detect_scene_timestamps(str(video_file))
 
     if len(timestamps) < MIN_SCENES_THRESHOLD:
@@ -55,8 +57,15 @@ def extract(video_id: str, output_dir: Path) -> list[dict]:
             f"[{video_id}] Only {len(timestamps)} scene(s) detected — "
             f"falling back to fixed {FALLBACK_INTERVAL_SECS}s interval sampling."
         )
-        duration = _get_duration(str(video_file))
         timestamps = list(range(0, int(duration), FALLBACK_INTERVAL_SECS))
+    else:
+        # Gap-fill: if two consecutive scene timestamps are more than MAX_GAP_SECS apart,
+        # insert evenly-spaced frames in between so no window is too long.
+        timestamps = _fill_gaps(timestamps, int(duration))
+        logger.info(
+            f"[{video_id}] {len(timestamps)} frame(s) after gap-fill "
+            f"(max gap: {MAX_GAP_SECS}s)"
+        )
 
     logger.info(f"[{video_id}] Saving {len(timestamps)} frame(s)...")
     frames = _save_frames(str(video_file), timestamps, frames_dir, video_id)
@@ -128,6 +137,32 @@ def _get_duration(video_path: str) -> float:
     frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
     cap.release()
     return frame_count / fps if fps > 0 else 0.0
+
+
+def _fill_gaps(timestamps: list[int], duration: int) -> list[int]:
+    """
+    Ensure no two consecutive timestamps are more than MAX_GAP_SECS apart.
+    Inserts evenly-spaced fill frames inside any gap that exceeds the limit.
+    Also appends a frame near the end of the video if needed.
+    """
+    # Ensure we have a sentinel at the end so the last gap is checked too
+    extended = sorted(set(timestamps))
+    if duration > 0 and (not extended or duration - extended[-1] > MAX_GAP_SECS):
+        extended.append(min(duration - 2, duration))  # near-end frame
+
+    result = []
+    for i, ts in enumerate(extended):
+        result.append(ts)
+        if i + 1 < len(extended):
+            gap = extended[i + 1] - ts
+            if gap > MAX_GAP_SECS:
+                # how many fill frames do we need?
+                n_fill = gap // MAX_GAP_SECS
+                step = gap / (n_fill + 1)
+                for j in range(1, n_fill + 1):
+                    result.append(int(ts + step * j))
+
+    return sorted(set(result))
 
 
 def _frames_from_existing(existing_files: list[Path], output_dir: Path) -> list[dict]:
