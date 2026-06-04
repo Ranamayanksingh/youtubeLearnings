@@ -184,3 +184,34 @@ class JobStore:
                 job.log_lines.append(f"{ts}  {line}")
                 if len(job.log_lines) > MAX_LOG_LINES:
                     job.log_lines = job.log_lines[-MAX_LOG_LINES:]
+
+    def restore_completed_job(
+        self,
+        video_id: str,
+        url: str,
+        title: str,
+        model_size: str | None = None,
+    ) -> None:
+        """Re-hydrate a completed job from disk so it shows on the dashboard after restart.
+
+        Uses video_id as the job_id so repeated restarts are idempotent.
+        """
+        with self._lock:
+            if video_id in self._jobs:
+                return  # already present (e.g. just ran in this session)
+            steps = []
+            for s in PIPELINE_STEPS:
+                step = StepStatus(index=s["index"], name=s["name"], status="completed")
+                steps.append(step)
+            job = Job(
+                job_id=video_id,
+                url=url,
+                model_size=model_size,
+                status="completed",
+                video_id=video_id,
+                title=title,
+                current_step=8,
+                steps=steps,
+                completed_at=datetime.utcnow(),
+            )
+            self._jobs[video_id] = job
