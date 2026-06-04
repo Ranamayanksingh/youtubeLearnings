@@ -87,28 +87,28 @@ OUTPUT FORMAT:
 Write only the Markdown. No preamble, no explanation."""
 
 
-_MEETING_PROMPT_TEMPLATE = """You are creating a structured meeting brief for a data lead engineer from a client meeting recording.
+_MEETING_PROMPT_TEMPLATE = """You are producing a structured meeting brief for a Data Engineering and Data Science team from a client meeting recording.
 
-Meeting/File: {title}
+Meeting: {title}
 Duration: {duration}
 Source: {url}
 
-Below are the extracted notes from this meeting (already segmented and cleaned):
+Below are the extracted notes from this meeting (already segmented):
 
 {topics_block}
 
 ---
 
-Your task: Produce a structured meeting brief in Markdown. Write in clear professional English.
+Your task: Produce a professional meeting brief in Markdown. Write in clear English only — no Hindi, no Hinglish.
 
 STRICT RULES:
-1. **Meeting Summary** — one concise paragraph: who attended (use speaker labels if available), main topics discussed, key decisions made
-2. **Data Concepts** — for EVERY data concept, hierarchy, join, table, schema, or system mentioned: create a dedicated subsection with "What they said → What it means → Why it matters"
-3. **Preserve exact names** — table names, field names, system names, hierarchy levels must be quoted exactly as stated
-4. **Action Items** — use a Markdown table: Owner | Action | Mentioned at
-5. **Follow-up Questions** — questions to ask the client next time, especially for ⚠️ unclear points
-6. **Knowledge Gaps** — topics the engineer should read up on before the next meeting
-7. Do NOT merge different data concepts — each gets its own subsection
+1. **Meeting Summary** — one concise paragraph covering: who attended (use speaker labels if present), what data topics were discussed, key decisions made
+2. **Data Concepts & Architecture** — for EVERY data concept, table, field, hierarchy, join type, schema, system, or pipeline mentioned: create a dedicated subsection explaining it clearly for a data engineer new to this client's data
+3. **Preserve exact names** — all table names, field names, system names, hierarchy levels, codes (e.g. SHIP_TO, GMC_CODE, SOLD2) must appear exactly as stated
+4. **Action Items** — Markdown table: Owner | Action | Context
+5. **Follow-up Questions** — specific questions to ask the client in the next meeting, especially for ⚠️ unclear items
+6. **Knowledge Gaps** — data concepts or systems the team should read up on to better understand this client's data model
+7. Do NOT merge different data concepts — each gets its own subsection under Data Concepts
 
 OUTPUT FORMAT:
 ```
@@ -118,42 +118,52 @@ OUTPUT FORMAT:
 ---
 
 ## Meeting Summary
-<one paragraph — attendees, topics, decisions>
+<one paragraph — attendees, data topics discussed, decisions made>
 
 ---
 
-## Data Concepts Explained
+## Data Concepts & Architecture
 
-### <Concept/System/Hierarchy Name>
-> Mentioned at <timestamp>
+### <Concept / Table / Hierarchy / System Name>
+> Referenced at ~<timestamp>
 
-**What they said:** "<direct quote or close paraphrase>"
+**What the client explained:** <direct paraphrase of what was said>
 
-**What this means:** <plain English explanation for a data engineer>
+**What this means:** <plain English explanation for a data engineer — define terms, explain relationships>
 
-**Why it matters:** <relevance to the project being built>
+**Relevance to the project:** <how this affects the DE/DS pipeline or data model being built>
+
+---
+
+## Data Relationships & Hierarchies
+<Use tables or diagrams to capture any hierarchy or relationship structures discussed>
+
+| Level | Field / Code | Description |
+|-------|-------------|-------------|
+| ... | ... | ... |
 
 ---
 
 ## Action Items
 
-| Owner | Action | Mentioned at |
-|-------|--------|-------------|
+| Owner | Action | Context |
+|-------|--------|---------|
 | ... | ... | ... |
 
 ---
 
 ## Follow-up Questions
-- ⚠️ **Unclear:** <what was unclear> → **Ask:** <specific question>
+- ⚠️ **Unclear:** <what was unclear> → **Ask:** <specific question to clarify>
 - **Dig deeper:** <topic> → **Ask:** <question>
 
 ---
 
 ## Knowledge Gaps
-- **<Term/concept>** — <one-line why it matters to read up on this>
+Topics the DE/DS team should read up on before the next meeting:
+- **<Term/system>** — <one-line why it matters>
 ```
 
-Write only the Markdown. No preamble, no explanation."""
+Write only the Markdown. No preamble, no explanation. English only."""
 
 
 def generate(video_id: str, output_dir: Path) -> Path:

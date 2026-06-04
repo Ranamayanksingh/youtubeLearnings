@@ -27,13 +27,14 @@ MIN_TRANSCRIPT_CHARS = 10  # windows with less speech than this are merged
 _DOMAIN_CACHE: dict[str, str] = {}
 
 
-def synthesize(video_id: str, output_dir: Path) -> dict:
+def synthesize(video_id: str, output_dir: Path, force_domain: str | None = None) -> dict:
     """
-    Synthesize clean Hinglish study notes from aligned_content.json.
+    Synthesize study/meeting notes from aligned_content.json.
 
     - Idempotent: returns existing synthesized.json if already done.
     - Merges short/empty windows before calling Claude.
     - Skips windows with no useful content.
+    - force_domain: if set, skips auto-detection and uses this domain label directly.
 
     Returns the synthesized dict.
     """
@@ -62,14 +63,18 @@ def synthesize(video_id: str, output_dir: Path) -> dict:
         f"{len(merged)} after merging short/empty windows"
     )
 
-    # Detect subject domain once for the whole video
-    sample_transcript = " ".join(
-        t["text"]
-        for seg in merged[:3]
-        for t in seg["transcript"]
-    )[:1500]
-    domain = _detect_domain(client, title, sample_transcript)
-    logger.info(f"[{video_id}] Detected domain: {domain}")
+    # Use forced domain or auto-detect once for the whole video
+    if force_domain:
+        domain = force_domain
+        logger.info(f"[{video_id}] Using forced domain: {domain}")
+    else:
+        sample_transcript = " ".join(
+            t["text"]
+            for seg in merged[:3]
+            for t in seg["transcript"]
+        )[:1500]
+        domain = _detect_domain(client, title, sample_transcript)
+        logger.info(f"[{video_id}] Detected domain: {domain}")
 
     topics = []
     prev_heading = None
@@ -230,45 +235,36 @@ def _synthesize_segment(
     is_meeting = "meeting" in domain.lower() or "client meeting" in domain.lower()
 
     if is_meeting:
-        domain_rules = """- This is a meeting recording. Treat each speaker's statements as separate — note who said what when speaker labels are available (SPEAKER_00, SPEAKER_01, etc.)
-- For every data concept mentioned (table name, hierarchy, join type, schema, system name, pipeline): extract it as a KEY_POINT with the exact relationship described
-- If the client describes a data structure or relationship (A → B, parent/child, one-to-many, foreign key): capture it EXACTLY as stated
-- Capture any decisions made or commitments given during this segment
-- Flag anything unclear or that needs follow-up with ⚠️
-- HEADING should reflect the topic being discussed (not who spoke)
-- ONLY skip if this segment is pure small talk, silence, or "can you hear me?" — skip nothing substantive"""
+        prompt = f"""You are extracting structured notes from a client meeting recording for a Data Engineering / Data Science team.
 
-        prompt = f"""You are extracting structured notes from a client meeting recording for a data lead engineer.
-
-Domain: {domain}
-Meeting/File: {title}
+Meeting: {title}
 Previous topic: {prev_heading or "N/A (this is the first segment)"}
 
-SCREEN CONTENT (OCR from screen share, may have noise):
+SCREEN CONTENT (OCR from screen share, may have noise — ignore garbled symbols):
 {visual_context or "(no screen content)"}
 
 MEETING AUDIO TRANSCRIPT:
 {transcript_text or "(no speech in this segment)"}
 
-Extract structured meeting notes. Write in clear English (not Hinglish — this is a professional context).
+Extract structured notes in clear professional English. This is a technical data discussion — every data concept matters.
 
 Produce your response in exactly this format:
-HEADING: <short topic heading, 3-8 words>
+HEADING: <short topic heading, 3-8 words, in English>
 QUESTION_TYPE: knowledge
-CONTENT: <2-5 sentences summarising what was discussed in this segment, including who said what if speaker labels are present>
+CONTENT: <2-4 sentences summarising what was discussed — what data concept/system/decision was explained, in plain English>
 KEY_POINTS:
-- <data concept / decision / action item / unclear point>
-- <data concept / decision / action item / unclear point>
-- <data concept / decision / action item / unclear point (optional)>
-- <data concept / decision / action item / unclear point (optional)>
+- <exact data concept, table name, field name, hierarchy level, or relationship — one per line>
+- <decision made or approach agreed upon>
+- <action item or owner if mentioned>
+- <anything unclear or needing follow-up — prefix with ⚠️>
 
-Rules:
-- Write in clear professional English
-- Preserve exact table names, field names, system names, and data relationships word-for-word
-- Mark unclear items and follow-up needs with ⚠️
-- Do not invent facts not present in the input
-- Keep key points concise — one line each
-{domain_rules}"""
+Strict rules:
+- Write ONLY in English — no Hindi, no Hinglish
+- Preserve exact names: table names, field names, column names, system names, hierarchy levels, codes (e.g. SHIP_TO, SOLD2, GMC_CODE) — quote them exactly as spoken
+- Capture data relationships precisely: "A → B", "one-to-many", "foreign key", "rolls up to"
+- Mark unclear points and follow-up needs with ⚠️
+- SKIP only if this segment is pure small talk, silence, or "can you hear me?" with zero data content
+- Do not invent facts not in the input"""
 
     elif is_ayurveda:
         domain_rules = """- PRESERVE all Sanskrit and Ayurvedic technical terms exactly as they appear in the slide text (Devanagari script). E.g. write "प्रमेह पिडिका" not "Prameh Pidika"

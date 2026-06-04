@@ -215,7 +215,7 @@ def run_meeting_job(
         store.start_step(job_id, 7)
         log("Aligning and synthesizing meeting notes...")
         aligner.align(video_id, output_dir)
-        synthesizer.synthesize(video_id, output_dir)
+        synthesizer.synthesize(video_id, output_dir, force_domain="client meeting")
         log("Synthesis complete")
         store.complete_step(job_id, 7)
 
