@@ -37,38 +37,128 @@
   <!-- ── Main Column ─────────────────────────────────────────── -->
   <div class="lg:col-span-2 space-y-6">
 
-    <!-- Submit form -->
+    <!-- Submit form — tabbed: YouTube / Meeting -->
     <div class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
-      <h2 class="text-lg font-bold text-stone-800 mb-4">Extract Study Notes from YouTube</h2>
-      <form hx-post="/api/jobs"
-            hx-ext="json-enc"
-            hx-target="#jobs-sections"
-            hx-swap="none"
-            hx-on::after-request="this.reset(); htmx.trigger('#jobs-sections', 'refresh')"
-            class="flex flex-col sm:flex-row gap-3">
 
-        <input type="url" name="url" required
-               placeholder="https://youtube.com/watch?v=..."
-               class="flex-1 border border-stone-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" />
-
-        <select name="model_size"
-                class="border border-stone-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
-          <option value="">Model: small (default)</option>
-          <option value="tiny">tiny (fastest)</option>
-          <option value="base">base</option>
-          <option value="small">small</option>
-          <option value="medium">medium (better Hindi)</option>
-          <option value="large-v3">large-v3 (best)</option>
-        </select>
-
-        <button type="submit"
-                class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl px-6 py-2 text-sm transition shadow-sm">
-          Extract
+      <!-- Tab headers -->
+      <div class="flex gap-1 mb-5 border-b border-stone-200">
+        <button onclick="switchTab('yt')" id="tab-yt"
+                class="tab-btn px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 border-amber-500 text-amber-700 -mb-px">
+          📺 YouTube Video
         </button>
-      </form>
+        <button onclick="switchTab('meeting')" id="tab-meeting"
+                class="tab-btn px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 border-transparent text-stone-500 hover:text-stone-700 -mb-px">
+          🎙️ Meeting Recording
+        </button>
+      </div>
+
+      <!-- YouTube tab -->
+      <div id="panel-yt">
+        <form hx-post="/api/jobs"
+              hx-ext="json-enc"
+              hx-target="#jobs-sections"
+              hx-swap="none"
+              hx-on::after-request="this.reset(); htmx.trigger('#jobs-sections', 'refresh')"
+              class="flex flex-col sm:flex-row gap-3">
+
+          <input type="url" name="url" required
+                 placeholder="https://youtube.com/watch?v=..."
+                 class="flex-1 border border-stone-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" />
+
+          <select name="model_size"
+                  class="border border-stone-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <option value="">Model: small (default)</option>
+            <option value="tiny">tiny (fastest)</option>
+            <option value="base">base</option>
+            <option value="small">small</option>
+            <option value="medium">medium (better Hindi)</option>
+            <option value="large-v3">large-v3 (best)</option>
+          </select>
+
+          <button type="submit"
+                  class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl px-6 py-2 text-sm transition shadow-sm">
+            Extract
+          </button>
+        </form>
+      </div>
+
+      <!-- Meeting tab -->
+      <div id="panel-meeting" class="hidden">
+        <form action="/api/meetings"
+              method="post"
+              enctype="multipart/form-data"
+              onsubmit="handleMeetingSubmit(event)"
+              class="flex flex-col gap-3">
+
+          <div class="flex flex-col sm:flex-row gap-3">
+            <label class="flex-1 flex items-center gap-3 border border-stone-300 rounded-xl px-4 py-2 cursor-pointer hover:border-amber-400 transition">
+              <span class="text-lg">📁</span>
+              <span id="file-label" class="text-sm text-stone-500">Choose file (MP4, MP3, M4A, WAV)...</span>
+              <input type="file" name="file" accept=".mp4,.webm,.mov,.mp3,.m4a,.wav" required
+                     class="hidden"
+                     onchange="document.getElementById('file-label').textContent = this.files[0]?.name || 'Choose file...'" />
+            </label>
+
+            <select name="model_size"
+                    class="border border-stone-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+              <option value="">Model: small (default)</option>
+              <option value="tiny">tiny (fastest)</option>
+              <option value="base">base</option>
+              <option value="small">small</option>
+              <option value="medium">medium (better accuracy)</option>
+              <option value="large-v3">large-v3 (best)</option>
+            </select>
+
+            <button type="submit"
+                    class="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold rounded-xl px-6 py-2 text-sm transition shadow-sm">
+              Analyze
+            </button>
+          </div>
+
+          <p class="text-xs text-stone-400">Supports MP4, WebM, MOV (video) and MP3, M4A, WAV (audio-only). Speaker diarization requires HF_TOKEN in .env.</p>
+        </form>
+      </div>
 
       <!-- HTMX json-enc extension -->
       <script src="https://unpkg.com/htmx-ext-json-enc@2.0.1/json-enc.js"></script>
+
+      <script>
+        function switchTab(tab) {
+          document.getElementById('panel-yt').classList.toggle('hidden', tab !== 'yt');
+          document.getElementById('panel-meeting').classList.toggle('hidden', tab !== 'meeting');
+          document.getElementById('tab-yt').classList.toggle('border-amber-500', tab === 'yt');
+          document.getElementById('tab-yt').classList.toggle('text-amber-700', tab === 'yt');
+          document.getElementById('tab-yt').classList.toggle('border-transparent', tab !== 'yt');
+          document.getElementById('tab-yt').classList.toggle('text-stone-500', tab !== 'yt');
+          document.getElementById('tab-meeting').classList.toggle('border-blue-500', tab === 'meeting');
+          document.getElementById('tab-meeting').classList.toggle('text-blue-700', tab === 'meeting');
+          document.getElementById('tab-meeting').classList.toggle('border-transparent', tab !== 'meeting');
+          document.getElementById('tab-meeting').classList.toggle('text-stone-500', tab !== 'meeting');
+        }
+
+        async function handleMeetingSubmit(e) {
+          e.preventDefault();
+          const form = e.target;
+          const data = new FormData(form);
+          const btn = form.querySelector('button[type=submit]');
+          btn.disabled = true;
+          btn.textContent = 'Uploading...';
+          try {
+            const resp = await fetch('/api/meetings', { method: 'POST', body: data });
+            if (resp.ok) {
+              form.reset();
+              document.getElementById('file-label').textContent = 'Choose file (MP4, MP3, M4A, WAV)...';
+              htmx.trigger('#jobs-sections', 'refresh');
+            } else {
+              const err = await resp.json();
+              alert('Upload failed: ' + (err.detail || resp.statusText));
+            }
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Analyze';
+          }
+        }
+      </script>
     </div>
 
     <!-- Jobs sections — only this div polls -->

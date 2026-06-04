@@ -4,9 +4,11 @@ jobs_api.py — REST API routes for job management.
 
 import json
 import logging
+import shutil
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -106,6 +108,51 @@ async def archive_job(job_id: str, request: Request):
         return {"status": "archived", "archived_path": str(archived_path)}
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Upload meeting recording ──────────────────────────────────────────────────
+
+ALLOWED_MEETING_EXTENSIONS = {".mp4", ".webm", ".mov", ".mp3", ".m4a", ".wav"}
+
+
+@router.post("/meetings")
+async def upload_meeting(
+    request: Request,
+    file: UploadFile = File(...),
+    model_size: str = Form(default=""),
+):
+    store = request.app.state.store
+    executor = request.app.state.executor
+    project_root = request.app.state.project_root
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_MEETING_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{suffix}'. Allowed: {sorted(ALLOWED_MEETING_EXTENSIONS)}",
+        )
+
+    # Save to a persistent staging directory (not /tmp — pipeline runs async)
+    staging_dir = Path(project_root) / "uploads"
+    staging_dir.mkdir(exist_ok=True)
+
+    job = store.create(url=f"local://{file.filename}", model_size=model_size or None)
+    dest = staging_dir / f"{job.job_id}{suffix}"
+
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    from web.pipeline_runner import run_meeting_job
+    executor.submit(
+        run_meeting_job,
+        job.job_id,
+        str(dest),
+        model_size or None,
+        store,
+        project_root,
+    )
+
+    return {"job_id": job.job_id, "status": job.status, "filename": file.filename}
 
 
 # ── Archived list (JSON) ──────────────────────────────────────────────────────

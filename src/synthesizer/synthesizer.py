@@ -227,11 +227,93 @@ def _synthesize_segment(
 
     # Domain-specific instructions injected into the prompt
     is_ayurveda = "ayurveda" in domain.lower()
-    if is_ayurveda:
+    is_meeting = "meeting" in domain.lower() or "client meeting" in domain.lower()
+
+    if is_meeting:
+        domain_rules = """- This is a meeting recording. Treat each speaker's statements as separate — note who said what when speaker labels are available (SPEAKER_00, SPEAKER_01, etc.)
+- For every data concept mentioned (table name, hierarchy, join type, schema, system name, pipeline): extract it as a KEY_POINT with the exact relationship described
+- If the client describes a data structure or relationship (A → B, parent/child, one-to-many, foreign key): capture it EXACTLY as stated
+- Capture any decisions made or commitments given during this segment
+- Flag anything unclear or that needs follow-up with ⚠️
+- HEADING should reflect the topic being discussed (not who spoke)
+- ONLY skip if this segment is pure small talk, silence, or "can you hear me?" — skip nothing substantive"""
+
+        prompt = f"""You are extracting structured notes from a client meeting recording for a data lead engineer.
+
+Domain: {domain}
+Meeting/File: {title}
+Previous topic: {prev_heading or "N/A (this is the first segment)"}
+
+SCREEN CONTENT (OCR from screen share, may have noise):
+{visual_context or "(no screen content)"}
+
+MEETING AUDIO TRANSCRIPT:
+{transcript_text or "(no speech in this segment)"}
+
+Extract structured meeting notes. Write in clear English (not Hinglish — this is a professional context).
+
+Produce your response in exactly this format:
+HEADING: <short topic heading, 3-8 words>
+QUESTION_TYPE: knowledge
+CONTENT: <2-5 sentences summarising what was discussed in this segment, including who said what if speaker labels are present>
+KEY_POINTS:
+- <data concept / decision / action item / unclear point>
+- <data concept / decision / action item / unclear point>
+- <data concept / decision / action item / unclear point (optional)>
+- <data concept / decision / action item / unclear point (optional)>
+
+Rules:
+- Write in clear professional English
+- Preserve exact table names, field names, system names, and data relationships word-for-word
+- Mark unclear items and follow-up needs with ⚠️
+- Do not invent facts not present in the input
+- Keep key points concise — one line each
+{domain_rules}"""
+
+    elif is_ayurveda:
         domain_rules = """- PRESERVE all Sanskrit and Ayurvedic technical terms exactly as they appear in the slide text (Devanagari script). E.g. write "प्रमेह पिडिका" not "Prameh Pidika"
 - After each Sanskrit term, add the Roman transliteration in parentheses on first use. E.g. "धूमपान (Dhoompaan)"
 - For Acharya names, use both scripts: "चरक (Charaka)", "सुश्रुत (Sushruta)", "वाग्भट (Vagbhata)"
 - Comparison of Acharyas on any metric → list as bullet points here (the generator will make the table)"""
+
+        prompt = f"""You are creating study notes from a video lecture.
+
+Domain: {domain}
+Video: {title}
+Previous topic: {prev_heading or "N/A (this is the first topic)"}
+
+SLIDE TEXT (may have OCR noise — ignore garbled symbols):
+{visual_context or "(no slide text)"}
+
+TEACHER'S SPEECH (may have transcription noise):
+{transcript_text or "(no speech in this window)"}
+
+Write clean study notes in Hinglish (natural Hindi-English mix, as a teacher would explain to students).
+
+Produce your response in exactly this format:
+HEADING: <short topic heading, 3-8 words>
+QUESTION_TYPE: <exactly one of: math | knowledge>
+CONTENT: <2-5 sentences explaining the concept or problem clearly in Hinglish>
+KEY_POINTS:
+- <key point 1>
+- <key point 2>
+- <key point 3 (optional)>
+- <key point 4 (optional)>
+
+QUESTION_TYPE rules:
+- Use "math" for: any question involving calculation, formula, numbers, percentage, speed-distance-time, LCM/HCF, algebra, series patterns with arithmetic/geometric logic, analogies based on squares/cubes
+- Use "knowledge" for: syllogism, coding-decoding, blood relation, direction sense, alphabetical series (letter-based), statement-conclusion, odd-one-out (non-numeric), GK, history, science facts, Ayurveda concepts
+
+Rules:
+- Write in natural Hinglish — mix Hindi and English as Indian students speak
+- Ignore garbled OCR text and transcription noise
+- If slide and speech conflict, prefer the speech
+- ONLY skip if this window is PURELY intro/outro/blank with zero teaching content (e.g. only "subscribe", "like", "hello everyone", "see you next class" with nothing else)
+- If there is ANY teaching, problem-solving, or explanation — extract it, do NOT skip
+- Do not invent facts not present in the input
+- Keep key points concise — one line each
+{domain_rules}"""
+
     else:
         domain_rules = """- Extract EVERY solved problem, question, formula, or concept taught — even if the teacher is just explaining one step
 - For mock test / problem-solving videos: each distinct question or concept is a valid topic, do NOT skip them
@@ -239,7 +321,7 @@ def _synthesize_segment(
 - If the teacher solves a problem, capture: the problem type, the method used, and the correct answer
 - For reasoning/aptitude: name the question type (coding-decoding, syllogism, blood relation, etc.)"""
 
-    prompt = f"""You are creating study notes from a video lecture.
+        prompt = f"""You are creating study notes from a video lecture.
 
 Domain: {domain}
 Video: {title}

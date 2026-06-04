@@ -87,6 +87,75 @@ OUTPUT FORMAT:
 Write only the Markdown. No preamble, no explanation."""
 
 
+_MEETING_PROMPT_TEMPLATE = """You are creating a structured meeting brief for a data lead engineer from a client meeting recording.
+
+Meeting/File: {title}
+Duration: {duration}
+Source: {url}
+
+Below are the extracted notes from this meeting (already segmented and cleaned):
+
+{topics_block}
+
+---
+
+Your task: Produce a structured meeting brief in Markdown. Write in clear professional English.
+
+STRICT RULES:
+1. **Meeting Summary** — one concise paragraph: who attended (use speaker labels if available), main topics discussed, key decisions made
+2. **Data Concepts** — for EVERY data concept, hierarchy, join, table, schema, or system mentioned: create a dedicated subsection with "What they said → What it means → Why it matters"
+3. **Preserve exact names** — table names, field names, system names, hierarchy levels must be quoted exactly as stated
+4. **Action Items** — use a Markdown table: Owner | Action | Mentioned at
+5. **Follow-up Questions** — questions to ask the client next time, especially for ⚠️ unclear points
+6. **Knowledge Gaps** — topics the engineer should read up on before the next meeting
+7. Do NOT merge different data concepts — each gets its own subsection
+
+OUTPUT FORMAT:
+```
+# Meeting Brief: {title}
+> {url} | {duration}
+
+---
+
+## Meeting Summary
+<one paragraph — attendees, topics, decisions>
+
+---
+
+## Data Concepts Explained
+
+### <Concept/System/Hierarchy Name>
+> Mentioned at <timestamp>
+
+**What they said:** "<direct quote or close paraphrase>"
+
+**What this means:** <plain English explanation for a data engineer>
+
+**Why it matters:** <relevance to the project being built>
+
+---
+
+## Action Items
+
+| Owner | Action | Mentioned at |
+|-------|--------|-------------|
+| ... | ... | ... |
+
+---
+
+## Follow-up Questions
+- ⚠️ **Unclear:** <what was unclear> → **Ask:** <specific question>
+- **Dig deeper:** <topic> → **Ask:** <question>
+
+---
+
+## Knowledge Gaps
+- **<Term/concept>** — <one-line why it matters to read up on this>
+```
+
+Write only the Markdown. No preamble, no explanation."""
+
+
 def generate(video_id: str, output_dir: Path) -> Path:
     """
     Generate exam-ready study_notes.md from synthesized.json.
@@ -119,23 +188,32 @@ def generate(video_id: str, output_dir: Path) -> Path:
     domain = synthesized.get("domain", "educational lecture")
 
     is_ayurveda = "ayurveda" in domain.lower()
-    if is_ayurveda:
+    is_meeting = "meeting" in domain.lower() or "client meeting" in domain.lower()
+
+    if is_meeting:
+        selected_template = _MEETING_PROMPT_TEMPLATE
+        log_label = "meeting brief"
+    elif is_ayurveda:
+        selected_template = _PROMPT_TEMPLATE
         domain_specific_rule = (
             "**Sanskrit terms**: Always use Devanagari script for Sanskrit/Ayurvedic terms — "
             "format: \"धूमपान (Dhoompaan)\", \"प्रमेह पिडिका (Prameh Pidika)\". "
             "Acharya names: \"चरक (Charaka)\", \"सुश्रुत (Sushruta)\", \"वाग्भट (Vagbhata)\". "
             "Acharya comparisons → ALWAYS use a table"
         )
+        log_label = "exam cheat sheet"
     else:
+        selected_template = _PROMPT_TEMPLATE
         domain_specific_rule = (
             "For each solved problem/question: state the question type, the approach/trick used, "
             "and the correct answer. Number each question if the video covers multiple questions. "
             "Do NOT merge different problems together — each question gets its own section"
         )
+        log_label = "exam cheat sheet"
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    logger.info(f"[{video_id}] Generating exam cheat sheet ({len(topics)} topics)...")
+    logger.info(f"[{video_id}] Generating {log_label} ({len(topics)} topics)...")
 
     # Split into batches of BATCH_SIZE topics so we never hit the output token limit.
     # Each batch produces standalone ## sections; we stitch them together.
@@ -149,14 +227,22 @@ def generate(video_id: str, output_dir: Path) -> Path:
             f"({len(batch)} topics)..."
         )
         topics_block = _build_topics_block(batch)
-        prompt = _PROMPT_TEMPLATE.format(
-            title=title,
-            url=url,
-            duration=duration,
-            domain=domain,
-            domain_specific_rule=domain_specific_rule,
-            topics_block=topics_block,
-        )
+        if is_meeting:
+            prompt = selected_template.format(
+                title=title,
+                url=url,
+                duration=duration,
+                topics_block=topics_block,
+            )
+        else:
+            prompt = selected_template.format(
+                title=title,
+                url=url,
+                duration=duration,
+                domain=domain,
+                domain_specific_rule=domain_specific_rule,
+                topics_block=topics_block,
+            )
         message = client.messages.create(
             model=_MODEL,
             max_tokens=8096,
