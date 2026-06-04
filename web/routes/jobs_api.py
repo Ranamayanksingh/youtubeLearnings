@@ -102,6 +102,7 @@ async def archive_job(job_id: str, request: Request):
     from src.utils import cleanup
     try:
         archived_path = cleanup.archive(job.video_id)
+        store.remove(job_id)
         return {"status": "archived", "archived_path": str(archived_path)}
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))

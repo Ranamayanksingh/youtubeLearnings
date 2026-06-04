@@ -185,6 +185,10 @@ class JobStore:
                 if len(job.log_lines) > MAX_LOG_LINES:
                     job.log_lines = job.log_lines[-MAX_LOG_LINES:]
 
+    def remove(self, job_id: str) -> None:
+        with self._lock:
+            self._jobs.pop(job_id, None)
+
     def restore_completed_job(
         self,
         video_id: str,
