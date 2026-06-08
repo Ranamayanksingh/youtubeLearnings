@@ -1,14 +1,12 @@
 # LLM Configuration
-# Switch between providers by changing `provider` below.
-# Valid values: "claude" | "gemini"
+# Provider and model are read from .env (LLM_PROVIDER, CLAUDE_MODEL, GEMINI_MODEL).
+# This file only sets fallback defaults — prefer configuring via .env.
 
 llm:
-  provider: "claude"
+  default_provider: "claude"
 
   claude:
-    model: "claude-sonnet-4-6"
-    # API key read from env: ANTHROPIC_API_KEY
+    default_model: "claude-sonnet-4-6"
 
   gemini:
-    model: "gemini-1.5-pro"
-    # API key read from env: GEMINI_API_KEY
+    default_model: "gemini-1.5-pro"

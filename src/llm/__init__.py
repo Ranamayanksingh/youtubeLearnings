@@ -1,6 +1,10 @@
 """
 src/llm/__init__.py — Factory for LLMProvider.
 
+Provider and model are resolved in this order (first wins):
+  1. Environment variables: LLM_PROVIDER, CLAUDE_MODEL / GEMINI_MODEL
+  2. config.yaml defaults
+
 Usage:
     from src.llm import get_llm
 
@@ -9,12 +13,13 @@ Usage:
     print(response.text)
 """
 
-from pathlib import Path
+import os
 from functools import lru_cache
+from pathlib import Path
 
 import yaml
 
-from .interface import LLMProvider, LLMResponse, ImageInput
+from .interface import ImageInput, LLMProvider, LLMResponse
 
 __all__ = ["get_llm", "LLMProvider", "LLMResponse", "ImageInput"]
 
@@ -23,38 +28,50 @@ _CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.yaml"
 
 def _load_config() -> dict:
     if not _CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"config.yaml not found at {_CONFIG_PATH}. "
-            "Copy config.yaml from the project root and set your provider."
-        )
+        return {}
     with open(_CONFIG_PATH, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f) or {}
 
 
 @lru_cache(maxsize=1)
 def get_llm() -> LLMProvider:
     """
-    Return a singleton LLMProvider based on config.yaml.
+    Return a singleton LLMProvider.
 
-    Cached — the same instance is reused across all callers in a process.
-    To force a reload (e.g. in tests), call get_llm.cache_clear() first.
+    Resolution order (first wins):
+      1. LLM_PROVIDER env var
+      2. config.yaml llm.default_provider
+      3. hardcoded default: "claude"
+
+    Cached — same instance reused across all callers in a process.
+    Call get_llm.cache_clear() to force a reload (e.g. in tests).
     """
     config = _load_config()
     llm_cfg = config.get("llm", {})
-    provider = llm_cfg.get("provider", "claude").lower()
+
+    provider = (
+        os.environ.get("LLM_PROVIDER")
+        or llm_cfg.get("default_provider", "claude")
+    ).lower()
 
     if provider == "claude":
         from .claude_provider import ClaudeProvider
-        model = llm_cfg.get("claude", {}).get("model", "claude-sonnet-4-6")
+        model = (
+            os.environ.get("CLAUDE_MODEL")
+            or llm_cfg.get("claude", {}).get("default_model", "claude-sonnet-4-6")
+        )
         return ClaudeProvider(model=model)
 
     elif provider == "gemini":
         from .gemini_provider import GeminiProvider
-        model = llm_cfg.get("gemini", {}).get("model", "gemini-1.5-pro")
+        model = (
+            os.environ.get("GEMINI_MODEL")
+            or llm_cfg.get("gemini", {}).get("default_model", "gemini-1.5-pro")
+        )
         return GeminiProvider(model=model)
 
     else:
         raise ValueError(
-            f"Unknown LLM provider '{provider}' in config.yaml. "
-            "Valid values: 'claude', 'gemini'."
+            f"Unknown LLM provider '{provider}'. "
+            "Set LLM_PROVIDER in .env to 'claude' or 'gemini'."
         )
