@@ -2,7 +2,7 @@
 src/llm/__init__.py — Factory for LLMProvider.
 
 Provider and model are resolved in this order (first wins):
-  1. Environment variables: LLM_PROVIDER, CLAUDE_MODEL / GEMINI_MODEL
+  1. Environment variables: LLM_PROVIDER, CLAUDE_MODEL / GEMINI_MODEL / GROQ_MODEL
   2. config.yaml defaults
 
 Usage:
@@ -66,12 +66,20 @@ def get_llm() -> LLMProvider:
         from .gemini_provider import GeminiProvider
         model = (
             os.environ.get("GEMINI_MODEL")
-            or llm_cfg.get("gemini", {}).get("default_model", "gemini-1.5-pro")
+            or llm_cfg.get("gemini", {}).get("default_model", "gemini-2.0-flash")
         )
         return GeminiProvider(model=model)
+
+    elif provider == "groq":
+        from .groq_provider import GroqProvider
+        model = (
+            os.environ.get("GROQ_MODEL")
+            or llm_cfg.get("groq", {}).get("default_model", "llama-3.3-70b-versatile")
+        )
+        return GroqProvider(model=model)
 
     else:
         raise ValueError(
             f"Unknown LLM provider '{provider}'. "
-            "Set LLM_PROVIDER in .env to 'claude' or 'gemini'."
+            "Set LLM_PROVIDER in .env to 'claude', 'gemini', or 'groq'."
         )

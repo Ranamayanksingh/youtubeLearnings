@@ -20,4 +20,5 @@ dependencies = [
     "pyannote-audio>=3.1.0",
     "pyyaml>=6.0.3",
     "google-genai>=2.8.0",
+    "groq>=1.4.0",
 ]
