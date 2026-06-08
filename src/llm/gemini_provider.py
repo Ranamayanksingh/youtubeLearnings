@@ -1,7 +1,7 @@
 """
 gemini_provider.py — Google Gemini implementation of LLMProvider.
 
-Requires: pip install google-generativeai
+Requires: pip install google-genai
 API key set in env: GEMINI_API_KEY
 """
 
@@ -13,19 +13,18 @@ from .interface import ImageInput, LLMProvider, LLMResponse
 class GeminiProvider(LLMProvider):
     def __init__(self, model: str) -> None:
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError:
             raise ImportError(
-                "google-generativeai is not installed. "
-                "Run: uv add google-generativeai"
+                "google-genai is not installed. "
+                "Run: uv add google-genai"
             )
 
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise EnvironmentError("GEMINI_API_KEY is not set.")
 
-        genai.configure(api_key=api_key)
-        self._genai = genai
+        self._client = genai.Client(api_key=api_key)
         self._model_name = model
 
     def complete(
@@ -36,34 +35,36 @@ class GeminiProvider(LLMProvider):
         temperature: float = 0.3,
         image: ImageInput | None = None,
     ) -> LLMResponse:
-        import base64
+        from google.genai import types
 
-        generation_config = self._genai.types.GenerationConfig(
+        config = types.GenerateContentConfig(
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
-        model = self._genai.GenerativeModel(
-            model_name=self._model_name,
-            generation_config=generation_config,
-        )
 
         if image:
-            import PIL.Image
-            import io
-            raw = base64.b64decode(image.data)
-            pil_image = PIL.Image.open(io.BytesIO(raw))
-            parts = [pil_image, prompt]
+            import base64
+            parts = [
+                types.Part.from_bytes(
+                    data=base64.b64decode(image.data),
+                    mime_type=image.media_type,
+                ),
+                prompt,
+            ]
         else:
             parts = [prompt]
 
-        response = model.generate_content(parts)
-        text = response.text
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=parts,
+            config=config,
+        )
 
-        # Gemini token counts (available in usage_metadata when present)
+        text = response.text or ""
         input_tokens = 0
         output_tokens = 0
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
-            output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+        if response.usage_metadata:
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
 
         return LLMResponse(text=text, input_tokens=input_tokens, output_tokens=output_tokens)
