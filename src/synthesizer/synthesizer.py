@@ -1,23 +1,21 @@
 """
-synthesizer.py — Converts aligned content into clean Hinglish study notes using Claude.
+synthesizer.py — Converts aligned content into clean Hinglish study notes using the configured LLM.
 
 Strategy:
   - Merge short/empty windows (< MIN_WINDOW_SECS or no transcript) into adjacent segment
-  - Send each merged segment to Claude with minimal prior context
-  - Claude extracts the teaching, cleans noise, writes in Hinglish
+  - Send each merged segment to the LLM with minimal prior context
+  - LLM extracts the teaching, cleans noise, writes in Hinglish
   - Segments with no useful content are skipped
 """
 
 import json
 import logging
-import os
 from pathlib import Path
 
-import anthropic
+from src.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "claude-sonnet-4-6"
 _TEMPERATURE = 0.3
 MIN_WINDOW_SECS = 15       # windows shorter than this are merged with next
 MIN_TRANSCRIPT_CHARS = 10  # windows with less speech than this are merged
@@ -47,13 +45,7 @@ def synthesize(video_id: str, output_dir: Path, force_domain: str | None = None)
 
     aligned = _load_json(output_dir / "aligned_content.json", video_id)
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise EnvironmentError(
-            "ANTHROPIC_API_KEY is not set. Cannot run synthesizer."
-        )
-
-    client = anthropic.Anthropic(api_key=api_key)
+    llm = get_llm()
     title = aligned.get("title", "Ayurveda Lecture")
     raw_segments = aligned.get("segments", [])
 
@@ -73,7 +65,7 @@ def synthesize(video_id: str, output_dir: Path, force_domain: str | None = None)
             for seg in merged[:3]
             for t in seg["transcript"]
         )[:1500]
-        domain = _detect_domain(client, title, sample_transcript)
+        domain = _detect_domain(llm, title, sample_transcript)
         logger.info(f"[{video_id}] Detected domain: {domain}")
 
     topics = []
@@ -84,7 +76,7 @@ def synthesize(video_id: str, output_dir: Path, force_domain: str | None = None)
             f"[{video_id}] Synthesizing segment {i + 1}/{len(merged)} "
             f"[{seg['window_start_sec']}s → {seg['window_end_sec']}s]..."
         )
-        result = _synthesize_segment(client, title, seg, prev_heading, domain)
+        result = _synthesize_segment(llm, title, seg, prev_heading, domain)
 
         if result is None:
             logger.info(f"[{video_id}]   → skipped (no useful content)")
@@ -181,9 +173,9 @@ def _merge_two(earlier: dict, later: dict) -> dict:
 # Domain detection
 # ---------------------------------------------------------------------------
 
-def _detect_domain(client: anthropic.Anthropic, title: str, sample_text: str) -> str:
+def _detect_domain(llm, title: str, sample_text: str) -> str:
     """
-    Ask Claude to identify the subject domain of the video in one short call.
+    Ask the LLM to identify the subject domain of the video in one short call.
     Returns a short domain label like "ayurveda", "reasoning/aptitude", "mathematics", etc.
     """
     prompt = f"""Video title: {title}
@@ -195,13 +187,8 @@ In 3-5 words, what is the subject domain of this video?
 Examples: "Ayurveda medical exam prep", "SSC reasoning mock test", "Physics lecture", "History competitive exam", "Mathematics problem solving"
 Reply with ONLY the domain label, nothing else."""
 
-    msg = client.messages.create(
-        model=_MODEL,
-        max_tokens=20,
-        temperature=0,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return msg.content[0].text.strip()
+    response = llm.complete(prompt, max_tokens=20, temperature=0)
+    return response.text.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +196,7 @@ Reply with ONLY the domain label, nothing else."""
 # ---------------------------------------------------------------------------
 
 def _synthesize_segment(
-    client: anthropic.Anthropic,
+    llm,
     title: str,
     segment: dict,
     prev_heading: str | None,
@@ -355,14 +342,8 @@ Rules:
 - Keep key points concise — one line each
 {domain_rules}"""
 
-    message = client.messages.create(
-        model=_MODEL,
-        max_tokens=800,
-        temperature=_TEMPERATURE,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    return _parse_response(message.content[0].text)
+    response = llm.complete(prompt, max_tokens=800, temperature=_TEMPERATURE)
+    return _parse_response(response.text)
 
 
 def _parse_response(text: str) -> dict | None:

@@ -1,20 +1,17 @@
 """
-vision.py — Claude Vision wrapper for describing lecture frames.
+vision.py — Vision fallback for describing lecture frames.
 
 Called only when OCR yields insufficient text (sparse or unreadable output).
-Uses claude-sonnet-4-6 with a context-aware prompt for Ayurveda lecture content.
+Uses the configured LLM provider with a context-aware prompt for Ayurveda lecture content.
 """
 
 import base64
 import logging
-import os
 from pathlib import Path
 
-import anthropic
+from src.llm import get_llm, ImageInput
 
 logger = logging.getLogger(__name__)
-
-_MODEL = "claude-sonnet-4-6"
 
 _PROMPT = """You are analyzing a frame from an Ayurveda educational video (Hindi/English lecture).
 
@@ -36,39 +33,17 @@ def describe_frame(image_path: str) -> dict:
     Returns dict with keys: text, description, content_type.
     Requires ANTHROPIC_API_KEY environment variable.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise EnvironmentError(
-            "ANTHROPIC_API_KEY is not set. Claude Vision fallback cannot be used."
-        )
-
     image_data = _encode_image(image_path)
     ext = Path(image_path).suffix.lower().lstrip(".")
     media_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
 
-    client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model=_MODEL,
+    llm = get_llm()
+    response = llm.complete(
+        _PROMPT,
         max_tokens=512,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": image_data,
-                        },
-                    },
-                    {"type": "text", "text": _PROMPT},
-                ],
-            }
-        ],
+        image=ImageInput(data=image_data, media_type=media_type),
     )
-
-    return _parse_response(message.content[0].text)
+    return _parse_response(response.text)
 
 
 def _encode_image(image_path: str) -> str:

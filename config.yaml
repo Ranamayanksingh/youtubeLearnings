@@ -1,0 +1,14 @@
+# LLM Configuration
+# Switch between providers by changing `provider` below.
+# Valid values: "claude" | "gemini"
+
+llm:
+  provider: "claude"
+
+  claude:
+    model: "claude-sonnet-4-6"
+    # API key read from env: ANTHROPIC_API_KEY
+
+  gemini:
+    model: "gemini-1.5-pro"
+    # API key read from env: GEMINI_API_KEY

@@ -10,14 +10,12 @@ Sends all synthesized topics in one Claude call for full-context restructuring:
 
 import json
 import logging
-import os
 from pathlib import Path
 
-import anthropic
+from src.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "claude-sonnet-4-6"
 _TEMPERATURE = 0.2  # lower than synthesizer — we want consistent, precise output
 
 
@@ -183,10 +181,6 @@ def generate(video_id: str, output_dir: Path) -> Path:
     synthesized = _load_json(output_dir / "synthesized.json", video_id)
     metadata = _load_json(output_dir / "metadata.json", video_id)
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise EnvironmentError("ANTHROPIC_API_KEY is not set.")
-
     topics = synthesized.get("topics", [])
     if not topics:
         raise ValueError(f"[{video_id}] No topics in synthesized.json.")
@@ -221,7 +215,7 @@ def generate(video_id: str, output_dir: Path) -> Path:
         )
         log_label = "exam cheat sheet"
 
-    client = anthropic.Anthropic(api_key=api_key)
+    llm = get_llm()
 
     logger.info(f"[{video_id}] Generating {log_label} ({len(topics)} topics)...")
 
@@ -253,13 +247,8 @@ def generate(video_id: str, output_dir: Path) -> Path:
                 domain_specific_rule=domain_specific_rule,
                 topics_block=topics_block,
             )
-        message = client.messages.create(
-            model=_MODEL,
-            max_tokens=8096,
-            temperature=_TEMPERATURE,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        chunk = message.content[0].text.strip()
+        response = llm.complete(prompt, max_tokens=8096, temperature=_TEMPERATURE)
+        chunk = response.text.strip()
 
         # Strip markdown code fences if Claude wrapped output in ```markdown ... ```
         if chunk.startswith("```"):
